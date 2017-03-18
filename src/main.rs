@@ -166,14 +166,18 @@ impl P65 {
     fn op_adc(&mut self) {
         let tsum = (self.a.0 as u16 + self.v1.0 as u16 + if self.p.c { 0x1 } else { 0x0 }) as u16;
         self.p.c = tsum >= 0x100;
-        self.p.v = ((self.a.0 & 0x80) ^ (self.v1.0 & 0x80)) & ((self.a.0 & 0x80) ^ ((tsum & 0x80) as u8)) != 0;
+        self.p.v = !((self.a.0 & 0x80) ^ (self.v1.0 & 0x80)) & ((self.a.0 & 0x80) ^ ((tsum & 0x80) as u8)) != 0;
         self.v1 = Wrapping((tsum & 0xff) as u8);
         self.fix_nz();
         self.a = self.v1;
     }
     fn op_sbc(&mut self) {
-        self.v1 = - self.v1;
-        self.op_adc();
+        let tsub = (self.a.0 as u16 - self.v1.0 as u16 - if self.p.c { 0x0 } else { 0x1 }) as u16;
+        self.p.c = tsub < 0x100;   // carry is not borrow
+        self.p.v = ((self.a.0 & 0x80) ^ (self.v1.0 & 0x80)) & ((self.a.0 & 0x80) ^ ((tsub & 0x80) as u8)) != 0;
+        self.v1 = Wrapping((tsub & 0xff) as u8);
+        self.fix_nz();
+        self.a = self.v1;
     }
     fn op_and(&mut self) { self.a = self.a & self.v1; }
     fn op_ora(&mut self) { self.a = self.a | self.v1; }
@@ -181,7 +185,7 @@ impl P65 {
     fn op_cmp(&mut self) {
         let tmpa = self.a;
         let tmpv = self.p.v;
-        println!("a: {:x} v1: {:x}", self.a, self.v1);
+        self.p.c = true;
         self.op_sbc();
         self.p.v = tmpv;
         self.a = tmpa;
@@ -232,10 +236,14 @@ impl P65 {
     fn op_tay(&mut self) { self.y = self.a; }
     fn op_tsx(&mut self) { self.x = self.s; }
     fn op_txa(&mut self) { self.a = self.x; }
-    fn op_txs(&mut self) { let stupid_borrow = self.x.0; self.unpack_set_p(stupid_borrow); }
+    fn op_txs(&mut self) { self.s = self.x; }
     fn op_tya(&mut self) { self.a = self.y; }
     fn op_pla(&mut self) { self.a = self.v1; }
-    fn op_plp(&mut self) { let stupid_borrow = self.v1.0; self.unpack_set_p(stupid_borrow); }
+    fn op_plp(&mut self) {  let stupid_borrow = self.v1.0; 
+                            let tmpb = self.p.b;    // B is unaffected by plp
+                            self.unpack_set_p(stupid_borrow); 
+                            self.p.b = tmpb;
+                            }
     
     fn op_bcs(&mut self) { if !self.p.c { self.ts = 3 }; }       // ts = 3 means to skip to T3 (+ 1), branch not taken
     fn op_bcc(&mut self) { if  self.p.c { self.ts = 3 }; }
@@ -250,7 +258,8 @@ impl P65 {
 
     fn decode_op(op: u8) -> fn(&mut Self) {
         const OPTABLE: [fn(&mut P65); 256] = [
-		     P65::op_nil, P65::op_ora, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk, P65::op_php, P65::op_ora, P65::op_asl, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk,
+// MSD LSD-> 0            1            2            3            4            5            6            7            8            9            a            b            c            d            e            f
+/*  0  */    P65::op_nil, P65::op_ora, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk, P65::op_php, P65::op_ora, P65::op_asl, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk,
  		     P65::op_bpl, P65::op_ora, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk, P65::op_clc, P65::op_ora, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk, 
 		     P65::op_nil, P65::op_and, P65::op_unk, P65::op_unk, P65::op_bit, P65::op_and, P65::op_rol, P65::op_unk, P65::op_plp, P65::op_and, P65::op_rol, P65::op_unk, P65::op_bit, P65::op_and, P65::op_rol, P65::op_unk, 
 		     P65::op_bmi, P65::op_and, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_and, P65::op_rol, P65::op_unk, P65::op_sec, P65::op_and, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_and, P65::op_rol, P65::op_unk, 
@@ -319,7 +328,6 @@ impl P65 {
         }
     }
     fn a2_abs(&mut self, mem: &mut Mem, opfun: fn(&mut Self)) {
-        println!("(pc): {}", mem.read(self.pc.0 as usize));
         match self.ts {
             1 => { self.al = Wrapping(mem.read(self.pc.0 as usize)); self.inc_pc(); },
             2 => { self.ah = Wrapping(mem.read(self.pc.0 as usize)); self.inc_pc(); },
@@ -537,9 +545,15 @@ impl P65 {
     }
 
     // TODO: NMI & RESET (FFFA e FFFC)
+    // FIXME
+    // please note that B is always set by BRK
+    // and is pushed on the stack with P
+    // when serving IRQs (caveats) B will be zero, at least on the stack -- don't know
+    // if you can push it and it is 1/0
+    // check: http://visual6502.org/wiki/index.php?title=6502_BRK_and_B_bit
     fn brk_imp(&mut self, mem: &mut Mem, _: fn(&mut Self)) {
         match self.ts {
-            1 => { mem.read(self.pc.0 as usize); },                // discard read. pc has been incremented earlier
+            1 => { mem.read(self.pc.0 as usize); self.p.b = true; },                // discard read. pc has been incremented earlier
             2 => { mem.write((self.s.0 as usize) + 0x100, (self.pc.0 >> 8) as u8);   self.dec_sp();  },
             3 => { mem.write((self.s.0 as usize) + 0x100, (self.pc.0 & 0xFF) as u8); self.dec_sp();  },    
             4 => { mem.write((self.s.0 as usize) + 0x100, (self.pack_p()) as u8);      self.dec_sp(); },
@@ -549,8 +563,20 @@ impl P65 {
             _ => {},
         }
     }
-    fn rti_imp(&mut self, _: &mut Mem, _: fn(&mut Self)) {
-        println!("MANCA!");
+    fn rti_imp(&mut self, mem: &mut Mem, _: fn(&mut Self)) {
+        match self.ts {
+            1 => { mem.read(self.pc.0 as usize);    self.inc_pc(); },   // discard read
+            2 => { mem.read((self.s.0 as usize) + 0x100); self.inc_sp(); },     // discard read too
+            3 => {  let pedante=mem.read(self.s.0 as usize);
+                    let tmpb = self.p.b; 
+                    self.unpack_set_p(pedante); self.inc_sp();
+                    self.p.b = tmpb;       // b is unaffected by rti & plp
+                        },
+            4 => { self.pc = Wrapping(mem.read((self.s.0 as usize) + 0x100) as u16 ); self.inc_sp(); }, 
+            5 => { self.pc += Wrapping((mem.read((self.s.0 as usize) + 0x100) as u16) << 8 );  }, 
+            6 => { self.fetch_op(mem); },
+            _ => {},
+        }
     }
 
     fn jmp_abs(&mut self, mem: &mut Mem, _: fn(&mut Self)) {
@@ -572,7 +598,8 @@ impl P65 {
             _ => {},
         }
     }
-
+    // FIXME check in RTS l'indirizzo di ritorno è ok
+    // in RTI è l'indirizzo -1
     fn rts_imp(&mut self, mem: &mut Mem, _: fn(&mut Self)) {
         match self.ts {
             1 => { mem.read(self.pc.0 as usize);    self.inc_pc(); },   // discard read
@@ -589,8 +616,9 @@ impl P65 {
         match self.ts {
             1 => { self.v1 = Wrapping(mem.read(self.pc.0 as usize)); self.inc_pc();  opfun(self);   },    // skip to 4 if branch not taken. relative jump is calculated from nextop address
             2 => { mem.read(self.pc.0 as usize);
-                                self.v2 = Wrapping(((self.v1.0 as u16 + self.pc.0 & 0xFF) >> 8) as u8);    // possible error in appendix a 5.8 hw manual, here fixed with discard
-                                self.pc = Wrapping((self.pc.0 & 0xFF00) | ((self.pc.0 + self.v1.0 as u16) & 0xFF));             // increment only pcl
+                                self.v2 = Wrapping(((self.v1.0 as u16 + (self.pc.0 & 0xFF)) >> 8) as u8);    // possible error in appendix a 5.8 hw manual, here fixed with discard
+                                self.pc = Wrapping((self.pc.0 & 0xFF00) | 
+                                    (self.pc.0.wrapping_add(self.v1.0 as u16) & 0xFF));             // increment only pcl
                                 if self.v2 == Wrapping(0) { self.ts += 1; } },                        // skip next if not carry 
             3 => { mem.read(self.pc.0 as usize);  self.pc += Wrapping((self.v2.0 as u16) << 8);  },                          // eventually complete carry propagation
             4 => { self.fetch_op(mem); },                                                                // finally fetch new opcode
@@ -664,15 +692,27 @@ impl P65 {
     }
 }
 
+static mut lastchar: u8 = 0;
+
 struct Mem<'a>(&'a mut [u8]);
 
 impl<'a> Mem<'a> {
     fn read(&mut self, a: usize) -> u8 {
-       
-        self.0[a] 
-        
+        if a == 0xF004 {
+            println!("leggo!");
+            unsafe {
+                let tmp = lastchar; 
+                lastchar = 0;
+                tmp
+            }
+        } else {
+            self.0[a] 
+        }
     }
-    fn write(&mut self, a: usize, v: u8) { self.0[a] = v; }
+    fn write(&mut self, a: usize, v: u8) { 
+//        if a == 0xF001 { println!("bem!{}\r",v); }
+        self.0[a] = v; 
+    }
 }
 
 fn main() {
@@ -682,13 +722,14 @@ fn main() {
         mem_store[x] = prog[x];
     }
 
+    let new_stdout = stdout();
+    let mut stdout = new_stdout.lock().into_raw_mode().unwrap();
+    let mut stdin = async_stdin().bytes();
 
-//    let mut stdin = async_stdin().bytes();
-//    let mut stdout = stdout().into_raw_mode().unwrap();
 
-    let mut f = std::fs::File::open("tests/AllsuiteA.bin").unwrap();
-    let rs = f.read_exact(&mut mem_store[0x4000..]);
-    if let Ok(i) = rs {
+    let mut f = std::fs::File::open("tests/ehbasic.bin").unwrap();
+    let rs = f.read_exact(&mut mem_store[0xC000..]);
+    if let Ok(_) = rs {
         println!("Good read ");
     } else {
         panic!("File not read in full");
@@ -699,19 +740,32 @@ fn main() {
     let mut mem = Mem(&mut mem_store);
     let mut pr = P65::new();
     
-    mem.write(0x210,0);
     pr.reset(&mut mem);
     
-    for x in 0..500_000_000 {
+    for x in 0..100000 {
+        let c = stdin.next();
+        match c {
+            Some(Ok(c)) => {
+                match c {
+                    0x3 => {
+                       write!(stdout,"Good-bye!\r\n").unwrap();
+                       break;
+                    },
+                    c => { unsafe { lastchar = c; } },
+                }
+            },
+            Some(Error) => { write!(stdout, "Error char\r\n").unwrap(); },
+            _ => { },
+        }
         pr.run(&mut mem, 1);
-        if pr.pc == Wrapping(0x45c0+1) { break; }   // +1 because pc is autoincremented during fetch
-        println!("({}): {:?}", x, pr);
+//        if pr.pc == Wrapping(0x45c0+1) { break; }   // +1 because pc is autoincremented during fetch
+        println!("({}): {:?}\r", x, pr);
     }
-//    println!("mem a #xF: {}", mem.read(0xF));
-    println!("mem a #x0210: {}", mem.read(0x210));
-    println!("mem a #x71: {}", mem.read(0x71));
-    println!("mem a #x202: {}", mem.read(0x202));
-    println!("mem a #x22a: {}", mem.read(0x22a));
+    println!("mem a #xF: {}\r", mem.read(0xF));
+    println!("mem a #x0210: {}\r", mem.read(0x210));
+    println!("mem a #x71: {}\r", mem.read(0x71));
+    println!("mem a #x202: {}\r", mem.read(0x202));
+    println!("mem a #x22a: {}\r", mem.read(0x22a));
 }
 
 
