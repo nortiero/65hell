@@ -175,38 +175,47 @@ impl P65 {
     fn op_nil(&mut self) { }     // nil means the opcode is managed elsewhere
     fn op_nop(&mut self) { }
     fn op_adc(&mut self) {
-        if false == false {
+        if self.p.d { 
+            self.op_adc_dec(); } else { self.op_adc_bin(); }
+    }
+    fn op_adc_bin(&mut self) {
             let tsum = (self.a as u16 + self.v1 as u16 + if self.p.c { 0x1 } else { 0x0 }) as u16;
             self.p.c = tsum >= 0x100;
             self.p.v = !((self.a as u8 & 0x80) ^ (self.v1 & 0x80)) & ((self.a as u8 & 0x80) ^ ((tsum & 0x80) as u8)) != 0;
             self.v1 =  ((tsum & 0xff) as u8);
             let tmp = self.v1; self.fix_nz(tmp);
             self.a = self.v1;
-        } else {
-            let mut c1 = self.a & 0x0F + self.v1 & 0x0F + if self.p.c { 1 } else { 0 };
-            let mut c2 = self.a & 0xF0 >> 4 + (self.v1 & 0xF0) >> 4;
+    }
+    fn op_adc_dec(&mut self) {
+            let mut c1: u8 = (self.a & 0x0F) + (self.v1 & 0x0F) + if self.p.c { 1 } else { 0 };
+            let mut c2: u8 = self.a.wrapping_shr(4) + self.v1.wrapping_shr(4);
             if c1 >= 0xA { c1 -= 0xA; c2 += 1; }
             if c2 >= 0xA { c2 -= 0xA; self.p.c = true; } else { self.p.c = false; }
-            self.a = c1 << 4 | c2;
-            self.p.z = self.a == 0;
-        }
+            self.a = c2.wrapping_shl(4) | c1;
+            self.p.z = (self.a == 0);
     }
     fn op_sbc(&mut self) {
-        if false == false {
+        if self.p.d { 
+            self.op_sbc_dec(); 
+        } else { 
+            self.op_sbc_bin(); 
+        }
+    }
+    fn op_sbc_bin(&mut self) {
             let tsub = (self.a as u16).wrapping_sub(self.v1 as u16).wrapping_sub(if self.p.c { 0x0 } else { 0x1 } as u16);
             self.p.c = !(tsub >= 0x100);
             self.p.v = ((self.a as u8 & 0x80) ^ (self.v1 & 0x80)) & ((self.a as u8 & 0x80) ^ ((tsub & 0x80) as u8)) != 0;
             self.v1 = (tsub & 0xff) as u8;
             let tmp = self.v1; self.fix_nz(tmp);
             self.a = self.v1 ;
-        } else {
-            let mut c1 = 10 + self.a & 0x0F - self.v1 & 0x0F - if self.p.c { 0 } else { 1 };
-            let mut c2 = 10 + self.a & 0xF0 >> 4 - (self.v1 & 0xF0) >> 4;
+    }
+    fn op_sbc_dec(&mut self) {
+            let mut c1 = 0xA + (self.a & 0x0F) - (self.v1 & 0x0F) - (if self.p.c { 0 } else { 1 });
+            let mut c2 = 0xA + self.a.wrapping_shr(4) -self.v1.wrapping_shr(4);
             if c1 >= 0xA { c1 -= 0xA; } else { c2 -= 1; }
             if c2 >= 0xA { c2 -= 0xA; self.p.c = true; } else { self.p.c = false; }
-            self.a = c1 << 4 | c2;
+            self.a = c2.wrapping_shl(4) | (c1);
             self.p.z = self.a == 0;
-        }
     }
     fn op_and(&mut self) { self.a = self.a & self.v1; let tmp = self.a; self.fix_nz(tmp); }
     fn op_ora(&mut self) { self.a = self.a | self.v1; let tmp = self.a; self.fix_nz(tmp); }
@@ -928,8 +937,8 @@ fn main() {
     let mut stdin = async_stdin().bytes();
 
 
-    let mut f = std::fs::File::open("tests/ehbasic.bin").unwrap();
-    let rs = f.read_exact(&mut mem_store[0xC000 ..]);
+    let mut f = std::fs::File::open("tests/fxa.bin").unwrap();
+    let rs = f.read_exact(&mut mem_store[0x000A ..]);
     if let Ok(_) = rs {
         println!("Good read ");
     } else {
@@ -943,10 +952,10 @@ fn main() {
     pr.reset(&mut mem);
 
     // per i test
-//    pr.pc =  0x400;
-//    pr.fetch_op(&mut mem);
-//     pr.tick();
-//    pr.cycle = 8;
+    pr.pc =  0x400;
+    pr.fetch_op(&mut mem);
+    pr.tick();
+    pr.cycle = 8;
         
     let mut oldpc = 0xFFFFu16;
     for x in 0.. {
@@ -968,8 +977,8 @@ fn main() {
         }
         pr.run(&mut mem, 1);
 //        if pr.pc ==  (0x45c0+1) { break; }   // +1 because pc is autoincremented during fetch
-//        if pr.cycle >= 84_000_000 {
-/*            if pr.ts == 1 {
+        if pr.cycle >= 100_000_000 {
+            if pr.ts == 1 {
                 print!("\r\n");
                 print!("{:3}",P65::op_name(pr.op).to_uppercase());
                 print!(" {:7}", P65::addr_string(pr.op, (mem.read(pr.pc as usize) as u16) | ((mem.read(pr.pc.wrapping_add(1) as usize) as u16) << 8)).to_uppercase());
@@ -978,14 +987,13 @@ fn main() {
             }
             print!(" {:?}", pr);  
             print!("\r\n");
-//        }
-*/        
+        }
 //        std::thread::sleep_ms(1);
         // check deadlock
         if pr.ts == 1 {
             if  pr.pc == oldpc {
-  //              println!("DEADLOCK in ({})!", pr.cycle);
-  //              break;
+                println!("DEADLOCK in ({})!", pr.cycle);
+                break;
             }
             oldpc = pr.pc;
         }
