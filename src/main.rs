@@ -1,15 +1,12 @@
 #![allow(unused_parens)]
+#![allow(unused_must_use)]
+#![allow(unused_variables)]
 
 extern crate termion;
-use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::async_stdin;
-use termion::event::{Event,Key};
 use std::io::{Read, stdin, stdout, Write};
 use std::fmt;
-use std::io;
-use std::io::prelude::*;
-use std::fs::File;
 use std::ascii::AsciiExt;
 
 struct P65Flags {
@@ -111,7 +108,8 @@ impl P65 {
 
     fn ah_al(&self) -> u16 { (self.ah as u16) << 8 | (self.al as u16) }
     fn inc_pc(&mut self) { self.pc = self.pc.wrapping_add(1); }
-    fn set_pc(&mut self, pch: u8, pcl: u8) { self.pc = (pch as u16) << 8 | pcl as u16; }
+    #[allow(dead_code)]
+    fn set_pc(&mut self, pch: u8, pcl: u8) { self.pc = ((pch as u16) << 8) | (pcl as u16); }
 
     fn inc_sp(&mut self) { self.s = self.s.wrapping_add(1); }
     fn dec_sp(&mut self) { self.s = self.s.wrapping_sub(1); }
@@ -307,7 +305,7 @@ impl P65 {
             
         OPTABLE[op as usize]
     }       
-
+    #[allow(dead_code)]
     fn op_name(op: u8) -> &'static str {
         const OPTABLE: [&'static str; 256] = [
 // MSD LSD-> 0            1            2            3            4            5            6            7            8            9            a            b            c            d            e            f
@@ -725,7 +723,7 @@ impl P65 {
 			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
 			 P65::ad_unk  ,P65::a3_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a3_zp  ,P65::a3_zp  ,P65::a3_zp  ,P65::ad_unk ,P65::a1_imp ,P65::ad_unk ,P65::a1_imp ,P65::ad_unk ,P65::a3_abs  ,P65::a3_abs ,P65::a3_abs ,P65::ad_unk,
 			 P65::a5_bxx  ,P65::a3_iy ,P65::ad_unk  ,P65::ad_unk ,P65::a3_zpx ,P65::a3_zpx ,P65::a3_zpy ,P65::ad_unk ,P65::a1_imp ,P65::a3_ay  ,P65::a1_imp ,P65::ad_unk ,P65::ad_unk  ,P65::a3_ax  ,P65::ad_unk ,P65::ad_unk,
-			 P65::a2_imm  ,P65::a2_ix ,P65::a2_imm  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a2_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a2_abs  ,P65::ad_unk,
+			 P65::a2_imm  ,P65::a2_ix ,P65::a2_imm  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a2_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a2_abs ,P65::ad_unk,
 			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zpx ,P65::a2_zpx ,P65::a2_zpy ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::a1_imp ,P65::ad_unk ,P65::a2_ax   ,P65::a2_ax  ,P65::a2_ay  ,P65::ad_unk,
 			 P65::a2_imm  ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
 			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
@@ -734,33 +732,9 @@ impl P65 {
         ]   ;
         ADDRTABLE[op as usize]
     }
-
-    fn addr_mode_(op: u8) -> AddrModeF {
-        const ADDRTABLE: [AddrModeF; 256] = [
-
-
- /*          0              1           2              3            4           5           6               7           8           9              a            b           c               d              e            f  */                 
-/*  0 */     P65::brk_imp ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a5_phx ,P65::a2_imm, P65::a1_ac  ,P65::ad_unk ,P65::ad_unk  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-/*  1 */	 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-/*  2 */	 P65::jsr_abs ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a5_plx ,P65::a2_imm ,P65::a1_ac  ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-/*  3 */	 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-/*  4 */	 P65::rti_imp ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a5_phx ,P65::a2_imm ,P65::a1_ac  ,P65::ad_unk ,P65::jmp_abs ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-/*  5 */	 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-/*  6 */	 P65::rts_imp ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a5_plx ,P65::a2_imm ,P65::a1_ac  ,P65::ad_unk ,P65::jmp_ind ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-/*  7 */	 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-/*  8 */	 P65::ad_unk  ,P65::a3_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a3_zp  ,P65::a3_zp  ,P65::a3_zp  ,P65::ad_unk ,P65::a1_imp ,P65::ad_unk ,P65::a1_imp ,P65::ad_unk ,P65::a3_abs  ,P65::a3_abs ,P65::a3_abs ,P65::ad_unk,
-/*  9 */	 P65::a5_bxx  ,P65::a3_iy ,P65::ad_unk  ,P65::ad_unk ,P65::a3_zpx ,P65::a3_zpx ,P65::a3_zpy ,P65::ad_unk ,P65::a1_imp ,P65::a3_ay  ,P65::a1_imp ,P65::ad_unk ,P65::ad_unk  ,P65::a3_ax  ,P65::ad_unk ,P65::ad_unk,
-/*  a */	 P65::a2_imm  ,P65::a2_ix ,P65::a2_imm  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a2_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a2_abs  ,P65::ad_unk,
-/*  b */	 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zpx ,P65::a2_zpx ,P65::a2_zpy ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::a1_imp ,P65::ad_unk ,P65::a2_ax   ,P65::a2_ax  ,P65::a2_ay  ,P65::ad_unk,
-/*  c */	 P65::a2_imm  ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-/*  d */	 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-/*  e */	 P65::a2_imm  ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-/*  f */	 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-        ]   ;
-        ADDRTABLE[op as usize]
-    }
-
-
+    
+    // quick'n'dirty addressing mode disassembler, very useful to debug the simulator itself
+    #[allow(dead_code)]
     fn addr_string(op: u8, v1: u16) -> String {
         match op & 0x0F {
         0x00 =>  {   
@@ -772,7 +746,7 @@ impl P65 {
                 } else if op == 0x20 { 
                     format!("${:04x}", v1)  /* jsr abs */ 
                 } else if op == 0x80 { 
-                    "NOP*".to_string() 
+                    "NOP*".to_string()
                 } else { 
                     format!("#${:2x}", (v1 & 0xFF) as u8) /* imm */ 
                 }
@@ -899,46 +873,36 @@ impl P65 {
     }
 }
 
-static mut lastchar: u8 = 0;
-
 struct Mem<'a>(&'a mut [u8]);
 
 impl<'a> Mem<'a> {
     fn read(&mut self, a: usize) -> u8 {
-        if a == 0xF004 {
-            unsafe {
-                let tmp = lastchar as char; 
-                lastchar = 0;
-                ((tmp as char).to_ascii_uppercase()) as u8
-            }
-        } else {
-//            print!("Rm! {:x} vale {:x}\r\n",a,self.0[a]);        
+        if a != 0xF004 {
             self.0[a] 
+        } else {
+            let tmp = self.0[a];         // temp hack for ehbasic i/o
+            self.0[a] = 0x00;
+            tmp
         }
     }
     fn write(&mut self, a: usize, v: u8) { 
-       if a == 0xF001 { print!("{}",v as char); } else {
+        if a == 0xF001 { print!("{}",v as char); } else {
             self.0[a] = v; 
         }
- //       print!("wm! {:x}= {:x}\r\n",a,v);        
     }
 }
 
 fn main() {
     let mut mem_store = [0u8; 65536];
-//    let prog = [0xa9u8 ,0x00 ,0x20 ,0x10 ,0x00 ,0x4c ,0x02 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x40 ,0xe8 ,0x88 ,0xe6 ,0x0f ,0x38 ,0x69 ,0x02 ,0x60];
-//    let prog = [0xa9u8 ,0x43, 0x8d, 0x01, 0xf0, 0xa9u8 ,0x49, 0x8d, 0x01,0xf0,0xa9u8 ,0x41, 0x8d, 0x01,0xf0,0xa9u8 ,0x4f, 0x8d, 0x01,0xf0,0xa9u8 ,0x21, 0x8d, 0x01,0xf0, 0x4c, 0x0, 0x0 ];
- //   for x in 0..prog.len() {
- //       mem_store[x] = prog[x];
-  //  }
 
     let new_stdout = stdout();
     let mut stdout = new_stdout.lock().into_raw_mode().unwrap();
     let mut stdin = async_stdin().bytes();
 
 
-    let mut f = std::fs::File::open("tests/fxa.bin").unwrap();
-    let rs = f.read_exact(&mut mem_store[0x000A ..]);
+
+    let mut f = std::fs::File::open("tests/ehbasic.bin").unwrap();
+    let rs = f.read_exact(&mut mem_store[0xC000 ..]);
     if let Ok(_) = rs {
         println!("Good read ");
     } else {
@@ -952,31 +916,33 @@ fn main() {
     pr.reset(&mut mem);
 
     // per i test
-    pr.pc =  0x400;
-    pr.fetch_op(&mut mem);
-    pr.tick();
-    pr.cycle = 8;
+//    pr.pc =  0x400;
+//    pr.fetch_op(&mut mem);
+//    pr.tick();
+//    pr.cycle = 8;
         
-    let mut oldpc = 0xFFFFu16;
-    for x in 0.. {
+//    let mut oldpc = 0xFFFFu16;
+    loop {
         let c = stdin.next();
         match c {
             Some(Ok(c)) => {
                 match c {
                     0x11 => {
-                       write!(stdout,"Good-bye!\r\n").unwrap();
-                       break;
+                            break; 
                     },
-                    c => { unsafe { lastchar = c } 
-                //        print!("{}",c as char );
+                    c => {
+                            mem.write(0xF004,c.to_ascii_uppercase());
                     },
                 }
             },
-            Some(Error) => { write!(stdout, "Error char\r\n").unwrap(); },
-            _ => { },
+            Some(Err(_)) => { write!(stdout, "Error char\r\n").unwrap(); },
+            None => {},
         }
-        pr.run(&mut mem, 1);
-//        if pr.pc ==  (0x45c0+1) { break; }   // +1 because pc is autoincremented during fetch
+        pr.run(&mut mem, 10_000);
+        stdout.flush().unwrap();
+    }
+    
+/*
         if pr.cycle >= 100_000_000 {
             if pr.ts == 1 {
                 print!("\r\n");
@@ -987,24 +953,10 @@ fn main() {
             }
             print!(" {:?}", pr);  
             print!("\r\n");
+            break;
         }
-//        std::thread::sleep_ms(1);
-        // check deadlock
-        if pr.ts == 1 {
-            if  pr.pc == oldpc {
-                println!("DEADLOCK in ({})!", pr.cycle);
-                break;
-            }
-            oldpc = pr.pc;
-        }
-        // meh
-        stdout.flush();
     }
-//    println!("mem a #xF: {}\r", mem.read(0xF));
-//    println!("mem a #x0210: {}\r", mem.read(0x210));
-//    println!("mem a #x71: {}\r", mem.read(0x71));
-    println!("mem a $200: {}\r", mem.read(0x200));
-//    println!("mem a #x22a: {}\r", mem.read(0x22a));
+*/        
 }
 
 
