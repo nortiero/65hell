@@ -958,36 +958,3 @@ fn main() {
     }
 */        
 }
-
-
-// NOTA: il negativo ha un problema al ciclo 1000 sul visual 6502, non mi combacia. fixare qui.
-
-/*
-    11.82%  $A5 LDA zero-page
-    10.37%  $D0 BNE
-     7.33%  $4C JMP absolute
-     6.97%  $E8 INX
-     4.46%  $10 BPL
-     3.82%  $C9 CMP immediate
-     3.49%  $30 BMI
-     3.32%  $F0 BEQ
-     3.32%  $24 BIT zero-page
-     2.94%  $85 STA zero-page
-     2.00%  $88 DEX
-     1.98%  $C8 INY
-     1.77%  $A8 TAY
-     1.74%  $E6 INC zero-page
-     1.74%  $B0 BCS
-     1.66%  $BD LDA absolute,X
-     1.64%  $B5 LDA zero-page,X
-     1.51%  $AD LDA absolute
-     1.41%  $20 JSR absolute
-     1.38%  $4A LSR A
-     1.37%  $60 RTS
-     1.35%  $B1 LDA (zero-page),Y
-     1.32%  $29 AND immediate
-     1.27%  $9D STA absolute,X
-     1.24%  $8D STA absolute
-     1.08%  $18 CLC
-     1.03%  $A9 LDA immediate
-     */
