@@ -8,33 +8,28 @@ use std::io::{Read, stdout, Write};
 mod cpu;
 mod memory;
 use memory::MemoryArray;
-use memory::Memory;
+use cpu::Memory;
 use cpu::P65;
 
+
+// Simple test program for my 6502 simulator. Will load EHBASIC at 0xC000 and run it. 
+
 fn main() {
-    let mut mem_store = [0u8; 65536];
 
     let new_stdout = stdout();
     let mut stdout = new_stdout.lock().into_raw_mode().unwrap();
     let mut stdin = async_stdin().bytes();
 
+    let mut pr = P65::new();
+    let mut mem = MemoryArray::new(65536).unwrap();        // the full awesome power of 64KB at the tip of your fingers
 
 
     let mut f = std::fs::File::open("tests/ehbasic.bin").unwrap();
-    let rs = f.read_exact(&mut mem_store[0xC000 ..]);
-    if let Ok(_) = rs {
-        println!("Good read ");
-    } else {
-        panic!("File not read in full");
-    }
+    let rs = f.read_exact(&mut mem.0[0xC000 ..]).unwrap();
     
-
-    let mut mem = MemoryArray(&mut mem_store);
-    let mut pr = P65::new();
-
     pr.reset(&mut mem);
 
-    // per i test
+//    per i test
 //    pr.pc =  0x400;
 //    pr.fetch_op(&mut mem);
 //    pr.tick();

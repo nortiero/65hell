@@ -1,9 +1,13 @@
 
 use std::fmt;
 
-use memory::Memory;
+// simple trait for memory operations
+pub trait Memory {
+    fn read(&mut self, a: usize) -> u8;
+    fn write(&mut self, a: usize, v: u8); 
+}
 
-
+// 6502 flags in a kind of understandable abstraction
 pub struct P65Flags {
             n: bool, 
             v: bool, 
@@ -30,7 +34,7 @@ impl fmt::Debug for P65Flags {
 }
 
 
-
+// processor state machine container
 pub struct P65 {
     a: u8,
     x: u8,
@@ -51,7 +55,6 @@ pub struct P65 {
 
 type AddrModeF = fn(&mut P65, &mut Memory,  fn(&mut P65));
 type OpcodeF = fn(&mut P65);
-
 
 impl fmt::Debug for P65 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
