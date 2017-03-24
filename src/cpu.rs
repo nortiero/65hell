@@ -1,4 +1,3 @@
-#![allow(unused_parens)]
 use std::fmt;
 
 // simple trait for memory operations
@@ -347,70 +346,70 @@ impl P65 {
     }
     fn a2_abs<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
-            2 => { self.ah =  (mem.read(self.pc as usize)); self.inc_pc(); },
-            3 => { self.v1 =  (mem.read(self.ah_al() as usize)); },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
+            2 => { self.ah =  mem.read(self.pc as usize); self.inc_pc(); },
+            3 => { self.v1 =  mem.read(self.ah_al() as usize); },
             4 => { opfun(self); self.fetch_op(mem); }
             _ => {},
         }
     }
     fn a2_iy<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.v1 =  (mem.read(self.pc as usize));  self.inc_pc(); },
-            2 => { self.al =  (mem.read(self.v1 as usize));  self.v1 = self.v1.wrapping_add(1); },
-            3 => { self.ah =  (mem.read(self.v1 as usize));  
-                                self.v2 =  (((self.al as u32 + self.y as u32) >> 8) as u8);
+            1 => { self.v1 =  mem.read(self.pc as usize);  self.inc_pc(); },
+            2 => { self.al =  mem.read(self.v1 as usize);  self.v1 = self.v1.wrapping_add(1); },
+            3 => { self.ah =  mem.read(self.v1 as usize);  
+                                self.v2 =  ((self.al as u32 + self.y as u32) >> 8) as u8;
                                 self.al = self.al.wrapping_add(self.y); },
-            4 => { self.v1 =  (mem.read(self.ah_al() as usize)); 
+            4 => { self.v1 =  mem.read(self.ah_al() as usize); 
                                 self.ah = self.ah.wrapping_add(self.v2); 
                                 if self.v2 ==  (0) { self.ts_inc(); }; },
-            5 => { self.v1 =  (mem.read(self.ah_al() as usize));  },
+            5 => { self.v1 =  mem.read(self.ah_al() as usize);  },
             6 => { opfun(self); self.fetch_op(mem); },
             _ => {},
         }
     }
     fn a2_zpx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { mem.read(self.al as usize); self.al = self.al.wrapping_add(self.x); },  //discard read
-            3 => { self.v1 =  (mem.read(self.al as usize)); },
+            3 => { self.v1 =  mem.read(self.al as usize); },
             4 => { opfun(self); self.fetch_op(mem); }
             _ => {},
         }
     }
     fn a2_zpy<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { mem.read(self.al as usize); self.al = self.al.wrapping_add(self.y); },  //discard read
-            3 => { self.v1 =  (mem.read(self.al as usize)); },
+            3 => { self.v1 =  mem.read(self.al as usize); },
             4 => { opfun(self); self.fetch_op(mem); }
             _ => {},
         }
     }
     fn a2_ay<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
-            2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc(); 
-                                self.v2 =  (((self.al as u16 + self.y as u16) >> 8) as u8);  // here v2 is max 1
+            1 => { self.al =  mem.read(self.pc as usize);  self.inc_pc(); },
+            2 => { self.ah =  mem.read(self.pc as usize);  self.inc_pc(); 
+                                self.v2 =  ((self.al as u16 + self.y as u16) >> 8) as u8;  // here v2 is max 1
                                 self.al = self.al.wrapping_add(self.y); },
-            3 => { self.v1 =  (mem.read(self.ah_al() as usize)); 
+            3 => { self.v1 =  mem.read(self.ah_al() as usize); 
                                 self.ah = self.ah.wrapping_add(self.v2); 
                                 if self.v2 ==  (0) { self.ts_inc(); }; },
-            4 => { self.v1 =  (mem.read(self.ah_al() as usize));  },
+            4 => { self.v1 =  mem.read(self.ah_al() as usize);  },
             5 => { opfun(self); self.fetch_op(mem); },
             _ => {},
         }
     }
     fn a2_ax<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
-            2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc();
-                                self.v2 =  (((self.al as u32 + self.x as u32) >> 8) as u8);
+            1 => { self.al =  mem.read(self.pc as usize);  self.inc_pc(); },
+            2 => { self.ah =  mem.read(self.pc as usize);  self.inc_pc();
+                                self.v2 =  ((self.al as u32 + self.x as u32) >> 8) as u8;
                                 self.al = self.al.wrapping_add(self.x); },
-            3 => { self.v1 =  (mem.read(self.ah_al() as usize)); 
+            3 => { self.v1 =  mem.read(self.ah_al() as usize); 
                                 self.ah = self.ah.wrapping_add(self.v2); 
                                 if self.v2 == 0 { self.ts_inc(); }; },
-            4 => { self.v1 =  (mem.read(self.ah_al() as usize));  },
+            4 => { self.v1 =  mem.read(self.ah_al() as usize);  },
             5 => { opfun(self); self.fetch_op(mem); },
             _ => {},
         }
@@ -418,7 +417,7 @@ impl P65 {
     
     fn a3_zp<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { opfun(self); mem.write(self.al as usize, self.v1); },
             3 => { self.fetch_op(mem); }
             _ => {},
@@ -427,8 +426,8 @@ impl P65 {
 
     fn a3_abs<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
-            2 => { self.ah =  (mem.read(self.pc as usize)); self.inc_pc(); },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
+            2 => { self.ah =  mem.read(self.pc as usize); self.inc_pc(); },
             3 => { opfun(self); mem.write(self.ah_al() as usize, self.v1); },
             4 => { self.fetch_op(mem); }
             _ => {},
@@ -436,10 +435,10 @@ impl P65 {
     }
     fn a3_ix<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
-            2 => { mem.read(self.al as usize);                     self.v1 = self.al.wrapping_add(self.x); },     // discard read
-            3 => { self.al =  (mem.read(self.v1 as usize));  self.v1 = self.v1.wrapping_add(1); },
-            4 => { self.ah =  (mem.read(self.v1 as usize)); },
+            1 => { self.al =  mem.read(self.pc as usize);  self.inc_pc(); },
+            2 => { mem.read(self.al as usize);             self.v1 = self.al.wrapping_add(self.x); },     // discard read
+            3 => { self.al =  mem.read(self.v1 as usize);  self.v1 = self.v1.wrapping_add(1); },
+            4 => { self.ah =  mem.read(self.v1 as usize); },
             5 => { opfun(self); mem.write(self.ah_al() as usize, self.v1); },
             6 => { self.fetch_op(mem); }
             _ => {},
@@ -447,11 +446,11 @@ impl P65 {
     }
     fn a3_ax<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
-            2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc();
-                                self.v2 =  (((self.al as u32 + self.x as u32) >> 8) as u8);
+            1 => { self.al =  mem.read(self.pc as usize);  self.inc_pc(); },
+            2 => { self.ah =  mem.read(self.pc as usize);  self.inc_pc();
+                                self.v2 =  ((self.al as u32 + self.x as u32) >> 8) as u8;
                                 self.al = self.al.wrapping_add(self.x); },
-            3 => { self.v1 =  (mem.read(self.ah_al() as usize)); 
+            3 => { self.v1 =  mem.read(self.ah_al() as usize); 
                                 self.ah = self.ah.wrapping_add(self.v2); },
             4 => { opfun(self); mem.write(self.ah_al() as usize, self.v1);  },
             5 => { self.fetch_op(mem); },
@@ -460,11 +459,11 @@ impl P65 {
     }
     fn a3_ay<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
-            2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc();
-                                self.v2 =  (((self.al as u32 + self.y as u32) >> 8) as u8);
+            1 => { self.al =  mem.read(self.pc as usize);  self.inc_pc(); },
+            2 => { self.ah =  mem.read(self.pc as usize);  self.inc_pc();
+                                self.v2 =  ((self.al as u32 + self.y as u32) >> 8) as u8;
                                 self.al = self.al.wrapping_add(self.y); },
-            3 => { self.v1 =  (mem.read(self.ah_al() as usize)); 
+            3 => { self.v1 =  mem.read(self.ah_al() as usize); 
                                 self.ah = self.ah.wrapping_add(self.v2); },
             4 => { opfun(self); mem.write(self.ah_al() as usize, self.v1);  },
             5 => { self.fetch_op(mem); },
@@ -473,7 +472,7 @@ impl P65 {
     }
     fn a3_zpx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { mem.read(self.al as usize);       self.al = self.al.wrapping_add(self.x);          },  // discard  
             3 => { opfun(self); mem.write(self.al as usize, self.v1); },
             4 => { self.fetch_op(mem); }
@@ -482,7 +481,7 @@ impl P65 {
     }
     fn a3_zpy<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { mem.read(self.al as usize);       self.al = self.al.wrapping_add(self.y);          },  // discard  
             3 => { opfun(self); mem.write(self.al as usize, self.v1); },
             4 => { self.fetch_op(mem); }
@@ -491,10 +490,10 @@ impl P65 {
     }
     fn a3_iy<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.v1 =  (mem.read(self.pc as usize));  self.inc_pc(); },
-            2 => { self.al =  (mem.read(self.v1 as usize));  self.v1 = self.v1.wrapping_add(1); },
-            3 => { self.ah =  (mem.read(self.v1 as usize));  
-                                self.v2 =  (((self.al as u32 + self.y as u32) >> 8) as u8);
+            1 => { self.v1 =  mem.read(self.pc as usize);  self.inc_pc(); },
+            2 => { self.al =  mem.read(self.v1 as usize);  self.v1 = self.v1.wrapping_add(1); },
+            3 => { self.ah =  mem.read(self.v1 as usize);  
+                                self.v2 =  ((self.al as u32 + self.y as u32) >> 8) as u8;
                                 self.al = self.al.wrapping_add(self.y); },
             4 => { mem.read(self.ah_al() as usize);          self.ah = self.ah.wrapping_add(self.v2); },
             5 => { opfun(self); mem.write(self.ah_al() as usize, self.v1);  },
@@ -504,8 +503,8 @@ impl P65 {
     }
     fn a4_zp<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
-            2 => { self.v1 =  (mem.read(self.al as usize));                },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
+            2 => { self.v1 =  mem.read(self.al as usize);                },
             3 => { mem.write(self.al as usize, self.v1); },                          // wasted write
             4 => { opfun(self); mem.write(self.al as usize, self.v1); },
             5 => { self.fetch_op(mem); }
@@ -514,9 +513,9 @@ impl P65 {
     }
     fn a4_zpx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { mem.read(self.al as usize); self.al = self.al.wrapping_add(self.x); },                 //discard read
-            3 => { self.v1 =  (mem.read(self.al as usize)); },
+            3 => { self.v1 =  mem.read(self.al as usize); },
             4 => { mem.write(self.al as usize, self.v1); },                          // wasted write
             5 => { opfun(self); mem.write(self.al as usize, self.v1); },
             6 => { self.fetch_op(mem); }
@@ -525,12 +524,12 @@ impl P65 {
     }
     fn a4_ax<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
-            2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc();
-                                self.v2 =  (((self.al as u32 + self.x as u32) >> 8) as u8);
+            1 => { self.al =  mem.read(self.pc as usize);  self.inc_pc(); },
+            2 => { self.ah =  mem.read(self.pc as usize);  self.inc_pc();
+                                self.v2 =  ((self.al as u32 + self.x as u32) >> 8) as u8;
                                 self.al = self.al.wrapping_add(self.x); },
             3 => { mem.read(self.ah_al() as usize); self.ah = self.ah.wrapping_add(self.v2); },        // discard read
-            4 => { self.v1 =  (mem.read(self.ah_al() as usize)); },
+            4 => { self.v1 = mem.read(self.ah_al() as usize); },
             5 => { mem.write(self.ah_al() as usize, self.v1);  },               // wasted write
             6 => { opfun(self); mem.write(self.ah_al() as usize, self.v1);  },
             7 => { self.fetch_op(mem); },
@@ -540,10 +539,10 @@ impl P65 {
 
     fn a4_abs<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
-            1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
-            2 => { self.ah =  (mem.read(self.pc as usize)); self.inc_pc(); },
-            3 => { self.v1 =  (mem.read(self.ah_al() as usize));                },
-            4 => { mem.write(self.ah_al() as usize, self.v1); },                          // wasted write
+            1 => { self.al =  mem.read(self.pc as usize); self.inc_pc();   },
+            2 => { self.ah =  mem.read(self.pc as usize); self.inc_pc();   },
+            3 => { self.v1 =  mem.read(self.ah_al() as usize);             },
+            4 => { mem.write(self.ah_al() as usize, self.v1);              },    // wasted write
             5 => { opfun(self); mem.write(self.ah_al() as usize, self.v1); },
             6 => { self.fetch_op(mem); }
             _ => {},
@@ -551,7 +550,6 @@ impl P65 {
     }
     
     fn jsr_abs<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
- //       println!("qui!!");
         match self.ts {
             1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { mem.read((self.s as usize) + 0x100);  },        // discard read. s tack pointer is always 1xx
@@ -587,7 +585,6 @@ impl P65 {
             1 => { mem.read(self.pc as usize);    self.inc_pc(); },   // discard read
             2 => { mem.read((self.s as usize) + 0x100); self.inc_sp(); },     // discard read too
             3 => {  let pedante=mem.read(self.s as usize + 0x100);
-//                    println!("pload: ss {}  {:x}",self.s,pedante); 
                     let tmpb = self.p.b; 
                     self.unpack_set_p(pedante); self.inc_sp();
                     self.p.b = tmpb;       // b is unaffected by rti & plp
@@ -635,11 +632,9 @@ impl P65 {
             1 => { self.v1 =  mem.read(self.pc as usize); self.inc_pc();  opfun(self);   },    // skip to 4 if branch not taken. relative jump is calculated from nextop address
             2 => { mem.read(self.pc as usize);
                         let newpc = self.pc as i16 as i32 + self.v1 as i8 as i32;  // we extend sign
-//                        println!("newpc: {:x}\r", newpc);
                         self.pc =  (self.pc & 0xFF00) | (newpc & 0xFF) as u16;   // modify pcl only
                         if (newpc & 0xFF00) as u16 == self.pc & 0xFF00 { self.ts += 1; }   // skip if not page
                         self.v2 =  ((newpc & 0xFF00) >> 8) as u8;   // save pch for later
- //                       println!("v2: {:x}", self.v2);
             },
             3 => { mem.read(self.pc as usize);  
                         self.pc =  self.pc & 0xFF | ((self.v2 as u16) << 8);
