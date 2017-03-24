@@ -248,23 +248,23 @@ impl P65 {
     fn op_sty(&mut self) { self.v1 = self.y; }
     fn op_pha(&mut self) { self.v1 = self.a; }
     fn op_php(&mut self) { self.v1 = self.pack_p(); }
-    fn op_sec(&mut self) { self.p.c = true; }     
+    fn op_sec(&mut self) { self.p.c = true;  }     
     fn op_clc(&mut self) { self.p.c = false; }     
-    fn op_sei(&mut self) { self.p.i = true; }     
+    fn op_sei(&mut self) { self.p.i = true;  }     
     fn op_cli(&mut self) { self.p.i = false; }     
-    fn op_sed(&mut self) { self.p.d = true; }     
+    fn op_sed(&mut self) { self.p.d = true;  }     
     fn op_cld(&mut self) { self.p.d = false; }     
     fn op_clv(&mut self) { self.p.v = false; }     
     fn op_inx(&mut self) { self.x = self.x.wrapping_add(1); let tmp = self.x; self.fix_nz(tmp); }  //  borrow check is retard
     fn op_dex(&mut self) { self.x = self.x.wrapping_sub(1); let tmp = self.x; self.fix_nz(tmp); }
     fn op_iny(&mut self) { self.y = self.y.wrapping_add(1); let tmp = self.y; self.fix_nz(tmp); }
     fn op_dey(&mut self) { self.y = self.y.wrapping_sub(1); let tmp = self.y; self.fix_nz(tmp); }
-    fn op_tax(&mut self) { self.x = self.a; let tmp = self.x; self.fix_nz(tmp); }
-    fn op_tay(&mut self) { self.y = self.a; let tmp = self.y; self.fix_nz(tmp); }
-    fn op_tsx(&mut self) { self.x = self.s; let tmp = self.x; self.fix_nz(tmp); }
-    fn op_txa(&mut self) { self.a = self.x; let tmp = self.a; self.fix_nz(tmp); }
-    fn op_txs(&mut self) { self.s = self.x; }  // TXS doesn't touch flags
-    fn op_tya(&mut self) { self.a = self.y; let tmp = self.a; self.fix_nz(tmp); }
+    fn op_tax(&mut self) { self.x = self.a;  let tmp = self.x; self.fix_nz(tmp); }
+    fn op_tay(&mut self) { self.y = self.a;  let tmp = self.y; self.fix_nz(tmp); }
+    fn op_tsx(&mut self) { self.x = self.s;  let tmp = self.x; self.fix_nz(tmp); }
+    fn op_txa(&mut self) { self.a = self.x;  let tmp = self.a; self.fix_nz(tmp); }
+    fn op_txs(&mut self) { self.s = self.x;  }  // TXS doesn't touch flags
+    fn op_tya(&mut self) { self.a = self.y;  let tmp = self.a; self.fix_nz(tmp); }
     fn op_pla(&mut self) { self.a = self.v1; let tmp = self.a; self.fix_nz(tmp); }
     fn op_plp(&mut self) { 
         let stupid_borrow = self.v1; 
@@ -280,8 +280,6 @@ impl P65 {
     fn op_bvc(&mut self) { if  self.p.v { self.ts = 3 }; }
     fn op_bmi(&mut self) { if !self.p.n { self.ts = 3 }; }       
     fn op_bpl(&mut self) { if  self.p.n { self.ts = 3 }; }
-
-
 
     fn decode_op(op: u8) -> OpcodeF {
         match op {
@@ -339,12 +337,6 @@ impl P65 {
             _ => {},
         }
     }
-
-// what is the type for something that is "usizeable" ? Doesn't exist. sht
-//    fn mem_read<T>(m: &mut Memory, a: T) ->  <u8> {
-//         (m.read(usize::try_from(a).unwrap()))
-//    }
-
     fn a2_zp<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
