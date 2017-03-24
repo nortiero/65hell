@@ -7,7 +7,7 @@ pub trait Memory {
     fn write(&mut self, a: usize, v: u8); 
 }
 
-// 6502 flags in a kind of understandable abstraction
+// 6502 flags
 pub struct P65Flags {
             n: bool, 
             v: bool, 
@@ -92,7 +92,7 @@ impl P65 {
         self.ts
     }
 
-    fn fetch_op(&mut self, mem: &mut Memory) -> u8 {
+    fn fetch_op<M: Memory>(&mut self, mem: &mut M) -> u8 {
         self.op = mem.read(self.pc as usize);
         self.inc_pc();
         self.ts = 0;    // will be incremented to 1 by tick
@@ -113,14 +113,14 @@ impl P65 {
     fn dec_sp(&mut self) { self.s = self.s.wrapping_sub(1); }
 
     fn pack_p(&self) -> u8 {
-        (if self.p.n { 0x80 } else { 0x00 }) |
-        if self.p.v { 0x40 } else { 0x00 } |
-        0x20 |
-        if self.p.b { 0x10 } else { 0x00 } |
-        if self.p.d { 0x08 } else { 0x00 } |
-        if self.p.i { 0x04 } else { 0x00 } |
-        if self.p.z { 0x02 } else { 0x00 } |
-        if self.p.c { 0x01 } else { 0x00 } 
+        (if self.p.n { 0x80 } else { 0x00 })  |
+         if self.p.v { 0x40 } else { 0x00 }   |
+         0x20                                 |
+         if self.p.b { 0x10 } else { 0x00 }   |
+         if self.p.d { 0x08 } else { 0x00 }   |
+         if self.p.i { 0x04 } else { 0x00 }   |
+         if self.p.z { 0x02 } else { 0x00 }   |
+         if self.p.c { 0x01 } else { 0x00 } 
     }
 
     fn unpack_set_p(&mut self, flags: u8) {
@@ -147,7 +147,6 @@ impl P65 {
         self.v1 = self.v1 << 1;
         let tmp = self.v1; self.fix_nz(tmp);
     }
-
     fn op_lsr(&mut self) {
         self.p.c = self.v1 & 0x01 != 0;
         self.v1 = self.v1 >> 1;
@@ -155,14 +154,14 @@ impl P65 {
     }        
     fn op_rol(&mut self) {
         let tmp = self.v1;
-        self.v1 = self.v1 << 1 |  (if self.p.c { 1 } else { 0 })  ;
-        self.p.c = tmp &  (0x80) !=  (0);
+        self.v1 = (self.v1 << 1) | (if self.p.c { 1 } else { 0 })  ;
+        self.p.c = tmp & 0x80 != 0;
         let tmp = self.v1; self.fix_nz(tmp);
     }
     fn op_ror(&mut self) {
         let tmp = self.v1;
-        self.v1 = self.v1 >> 1 |  (if self.p.c { 0x80 } else { 0 })  ;
-        self.p.c = tmp &  (0x1) !=  (0);
+        self.v1 = (self.v1 >> 1) | (if self.p.c { 0x80 } else { 0 })  ;
+        self.p.c = tmp & 0x1 != 0;
         let tmp = self.v1; self.fix_nz(tmp);
     }
     fn op_unk(&mut self) {
@@ -172,7 +171,10 @@ impl P65 {
     fn op_nop(&mut self) { }
     fn op_adc(&mut self) {
         if self.p.d { 
-            self.op_adc_dec(); } else { self.op_adc_bin(); }
+            self.op_adc_dec(); 
+        } else { 
+            self.op_adc_bin(); 
+        }
     }
     fn op_adc_bin(&mut self) {
             let tsum = (self.a as u16 + self.v1 as u16 + if self.p.c { 0x1 } else { 0x0 }) as u16;
@@ -261,15 +263,15 @@ impl P65 {
     fn op_tay(&mut self) { self.y = self.a; let tmp = self.y; self.fix_nz(tmp); }
     fn op_tsx(&mut self) { self.x = self.s; let tmp = self.x; self.fix_nz(tmp); }
     fn op_txa(&mut self) { self.a = self.x; let tmp = self.a; self.fix_nz(tmp); }
-    fn op_txs(&mut self) { self.s = self.x;  }  // TXS doesn't change flags
+    fn op_txs(&mut self) { self.s = self.x; }  // TXS doesn't touch flags
     fn op_tya(&mut self) { self.a = self.y; let tmp = self.a; self.fix_nz(tmp); }
     fn op_pla(&mut self) { self.a = self.v1; let tmp = self.a; self.fix_nz(tmp); }
-    fn op_plp(&mut self) {  let stupid_borrow = self.v1; 
-                            let tmpb = self.p.b;    // B is unaffected by plp
-                            self.unpack_set_p(stupid_borrow); 
-                            self.p.b = tmpb;
-                            }
-    
+    fn op_plp(&mut self) { 
+        let stupid_borrow = self.v1; 
+        let tmpb = self.p.b;    // B is unaffected by plp
+        self.unpack_set_p(stupid_borrow); 
+        self.p.b = tmpb;
+    }
     fn op_bcs(&mut self) { if !self.p.c { self.ts = 3 }; }       // ts = 3 means to skip to T3 (+ 1), branch not taken
     fn op_bcc(&mut self) { if  self.p.c { self.ts = 3 }; }
     fn op_beq(&mut self) { if !self.p.z { self.ts = 3 }; }
@@ -282,51 +284,26 @@ impl P65 {
 
 
     fn decode_op(op: u8) -> OpcodeF {
-        const OPTABLE: [OpcodeF; 256] = [
-// MSD LSD-> 0            1            2            3            4            5            6            7            8            9            a            b            c            d            e            f
-/*  0  */    P65::op_nil, P65::op_ora, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk, P65::op_php, P65::op_ora, P65::op_asl, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk,
- 		     P65::op_bpl, P65::op_ora, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk, P65::op_clc, P65::op_ora, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_ora, P65::op_asl, P65::op_unk, 
-		     P65::op_nil, P65::op_and, P65::op_unk, P65::op_unk, P65::op_bit, P65::op_and, P65::op_rol, P65::op_unk, P65::op_plp, P65::op_and, P65::op_rol, P65::op_unk, P65::op_bit, P65::op_and, P65::op_rol, P65::op_unk, 
-		     P65::op_bmi, P65::op_and, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_and, P65::op_rol, P65::op_unk, P65::op_sec, P65::op_and, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_and, P65::op_rol, P65::op_unk, 
-		     P65::op_nil, P65::op_eor, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_eor, P65::op_lsr, P65::op_unk, P65::op_pha, P65::op_eor, P65::op_lsr, P65::op_unk, P65::op_nil, P65::op_eor, P65::op_lsr, P65::op_unk, 
-		     P65::op_bvc, P65::op_eor, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_eor, P65::op_lsr, P65::op_unk, P65::op_cli, P65::op_eor, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_eor, P65::op_lsr, P65::op_unk, 
-		     P65::op_nil, P65::op_adc, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_adc, P65::op_ror, P65::op_unk, P65::op_pla, P65::op_adc, P65::op_ror, P65::op_unk, P65::op_nil, P65::op_adc, P65::op_ror, P65::op_unk, 
-		     P65::op_bvs, P65::op_adc, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_adc, P65::op_ror, P65::op_unk, P65::op_sei, P65::op_adc, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_adc, P65::op_ror, P65::op_unk, 
-		     P65::op_unk, P65::op_sta, P65::op_unk, P65::op_unk, P65::op_sty, P65::op_sta, P65::op_stx, P65::op_unk, P65::op_dey, P65::op_unk, P65::op_txa, P65::op_unk, P65::op_sty, P65::op_sta, P65::op_stx, P65::op_unk, 
-		     P65::op_bcc, P65::op_sta, P65::op_unk, P65::op_unk, P65::op_sty, P65::op_sta, P65::op_stx, P65::op_unk, P65::op_tya, P65::op_sta, P65::op_txs, P65::op_unk, P65::op_unk, P65::op_sta, P65::op_unk, P65::op_unk, 
-		     P65::op_ldy, P65::op_lda, P65::op_ldx, P65::op_unk, P65::op_ldy, P65::op_lda, P65::op_ldx, P65::op_unk, P65::op_tay, P65::op_lda, P65::op_tax, P65::op_unk, P65::op_ldy, P65::op_lda, P65::op_ldx, P65::op_unk, 
-		     P65::op_bcs, P65::op_lda, P65::op_unk, P65::op_unk, P65::op_ldy, P65::op_lda, P65::op_ldx, P65::op_unk, P65::op_clv, P65::op_lda, P65::op_tsx, P65::op_unk, P65::op_ldy, P65::op_lda, P65::op_ldx, P65::op_unk, 
-		     P65::op_cpy, P65::op_cmp, P65::op_unk, P65::op_unk, P65::op_cpy, P65::op_cmp, P65::op_dec, P65::op_unk, P65::op_iny, P65::op_cmp, P65::op_dex, P65::op_unk, P65::op_cpy, P65::op_cmp, P65::op_dec, P65::op_unk, 
-		     P65::op_bne, P65::op_cmp, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_cmp, P65::op_dec, P65::op_unk, P65::op_cld, P65::op_cmp, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_cmp, P65::op_dec, P65::op_unk, 
-		     P65::op_cpx, P65::op_sbc, P65::op_unk, P65::op_unk, P65::op_cpx, P65::op_sbc, P65::op_inc, P65::op_unk, P65::op_inx, P65::op_sbc, P65::op_nop, P65::op_unk, P65::op_cpx, P65::op_sbc, P65::op_inc, P65::op_unk, 
-		     P65::op_beq, P65::op_sbc, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_sbc, P65::op_inc, P65::op_unk, P65::op_sed, P65::op_sbc, P65::op_unk, P65::op_unk, P65::op_unk, P65::op_sbc, P65::op_inc, P65::op_unk,];
-            
-        OPTABLE[op as usize]
+        match op {
+             0x00 => P65::op_nil, 0x01 => P65::op_ora, 0x02 => P65::op_unk, 0x03 => P65::op_unk, 0x04 => P65::op_unk, 0x05 => P65::op_ora, 0x06 => P65::op_asl, 0x07 => P65::op_unk, 0x08 => P65::op_php, 0x09 => P65::op_ora, 0x0a => P65::op_asl, 0x0b => P65::op_unk, 0x0c => P65::op_unk, 0x0d => P65::op_ora, 0x0e => P65::op_asl, 0x0f => P65::op_unk,
+ 		     0x10 => P65::op_bpl, 0x11 => P65::op_ora, 0x12 => P65::op_unk, 0x13 => P65::op_unk, 0x14 => P65::op_unk, 0x15 => P65::op_ora, 0x16 => P65::op_asl, 0x17 => P65::op_unk, 0x18 => P65::op_clc, 0x19 => P65::op_ora, 0x1a => P65::op_unk, 0x1b => P65::op_unk, 0x1c => P65::op_unk, 0x1d => P65::op_ora, 0x1e => P65::op_asl, 0x1f => P65::op_unk, 
+		     0x20 => P65::op_nil, 0x21 => P65::op_and, 0x22 => P65::op_unk, 0x23 => P65::op_unk, 0x24 => P65::op_bit, 0x25 => P65::op_and, 0x26 => P65::op_rol, 0x27 => P65::op_unk, 0x28 => P65::op_plp, 0x29 => P65::op_and, 0x2a => P65::op_rol, 0x2b => P65::op_unk, 0x2c => P65::op_bit, 0x2d => P65::op_and, 0x2e => P65::op_rol, 0x2f => P65::op_unk, 
+		     0x30 => P65::op_bmi, 0x31 => P65::op_and, 0x32 => P65::op_unk, 0x33 => P65::op_unk, 0x34 => P65::op_unk, 0x35 => P65::op_and, 0x36 => P65::op_rol, 0x37 => P65::op_unk, 0x38 => P65::op_sec, 0x39 => P65::op_and, 0x3a => P65::op_unk, 0x3b => P65::op_unk, 0x3c => P65::op_unk, 0x3d => P65::op_and, 0x3e => P65::op_rol, 0x3f => P65::op_unk, 
+		     0x40 => P65::op_nil, 0x41 => P65::op_eor, 0x42 => P65::op_unk, 0x43 => P65::op_unk, 0x44 => P65::op_unk, 0x45 => P65::op_eor, 0x46 => P65::op_lsr, 0x47 => P65::op_unk, 0x48 => P65::op_pha, 0x49 => P65::op_eor, 0x4a => P65::op_lsr, 0x4b => P65::op_unk, 0x4c => P65::op_nil, 0x4d => P65::op_eor, 0x4e => P65::op_lsr, 0x4f => P65::op_unk, 
+		     0x50 => P65::op_bvc, 0x51 => P65::op_eor, 0x52 => P65::op_unk, 0x53 => P65::op_unk, 0x54 => P65::op_unk, 0x55 => P65::op_eor, 0x56 => P65::op_lsr, 0x57 => P65::op_unk, 0x58 => P65::op_cli, 0x59 => P65::op_eor, 0x5a => P65::op_unk, 0x5b => P65::op_unk, 0x5c => P65::op_unk, 0x5d => P65::op_eor, 0x5e => P65::op_lsr, 0x5f => P65::op_unk, 
+		     0x60 => P65::op_nil, 0x61 => P65::op_adc, 0x62 => P65::op_unk, 0x63 => P65::op_unk, 0x64 => P65::op_unk, 0x65 => P65::op_adc, 0x66 => P65::op_ror, 0x67 => P65::op_unk, 0x68 => P65::op_pla, 0x69 => P65::op_adc, 0x6a => P65::op_ror, 0x6b => P65::op_unk, 0x6c => P65::op_nil, 0x6d => P65::op_adc, 0x6e => P65::op_ror, 0x6f => P65::op_unk, 
+		     0x70 => P65::op_bvs, 0x71 => P65::op_adc, 0x72 => P65::op_unk, 0x73 => P65::op_unk, 0x74 => P65::op_unk, 0x75 => P65::op_adc, 0x76 => P65::op_ror, 0x77 => P65::op_unk, 0x78 => P65::op_sei, 0x79 => P65::op_adc, 0x7a => P65::op_unk, 0x7b => P65::op_unk, 0x7c => P65::op_unk, 0x7d => P65::op_adc, 0x7e => P65::op_ror, 0x7f => P65::op_unk, 
+		     0x80 => P65::op_unk, 0x81 => P65::op_sta, 0x82 => P65::op_unk, 0x83 => P65::op_unk, 0x84 => P65::op_sty, 0x85 => P65::op_sta, 0x86 => P65::op_stx, 0x87 => P65::op_unk, 0x88 => P65::op_dey, 0x89 => P65::op_unk, 0x8a => P65::op_txa, 0x8b => P65::op_unk, 0x8c => P65::op_sty, 0x8d => P65::op_sta, 0x8e => P65::op_stx, 0x8f => P65::op_unk, 
+		     0x90 => P65::op_bcc, 0x91 => P65::op_sta, 0x92 => P65::op_unk, 0x93 => P65::op_unk, 0x94 => P65::op_sty, 0x95 => P65::op_sta, 0x96 => P65::op_stx, 0x97 => P65::op_unk, 0x98 => P65::op_tya, 0x99 => P65::op_sta, 0x9a => P65::op_txs, 0x9b => P65::op_unk, 0x9c => P65::op_unk, 0x9d => P65::op_sta, 0x9e => P65::op_unk, 0x9f => P65::op_unk, 
+		     0xa0 => P65::op_ldy, 0xa1 => P65::op_lda, 0xa2 => P65::op_ldx, 0xa3 => P65::op_unk, 0xa4 => P65::op_ldy, 0xa5 => P65::op_lda, 0xa6 => P65::op_ldx, 0xa7 => P65::op_unk, 0xa8 => P65::op_tay, 0xa9 => P65::op_lda, 0xaa => P65::op_tax, 0xab => P65::op_unk, 0xac => P65::op_ldy, 0xad => P65::op_lda, 0xae => P65::op_ldx, 0xaf => P65::op_unk, 
+		     0xb0 => P65::op_bcs, 0xb1 => P65::op_lda, 0xb2 => P65::op_unk, 0xb3 => P65::op_unk, 0xb4 => P65::op_ldy, 0xb5 => P65::op_lda, 0xb6 => P65::op_ldx, 0xb7 => P65::op_unk, 0xb8 => P65::op_clv, 0xb9 => P65::op_lda, 0xba => P65::op_tsx, 0xbb => P65::op_unk, 0xbc => P65::op_ldy, 0xbd => P65::op_lda, 0xbe => P65::op_ldx, 0xbf => P65::op_unk, 
+		     0xc0 => P65::op_cpy, 0xc1 => P65::op_cmp, 0xc2 => P65::op_unk, 0xc3 => P65::op_unk, 0xc4 => P65::op_cpy, 0xc5 => P65::op_cmp, 0xc6 => P65::op_dec, 0xc7 => P65::op_unk, 0xc8 => P65::op_iny, 0xc9 => P65::op_cmp, 0xca => P65::op_dex, 0xcb => P65::op_unk, 0xcc => P65::op_cpy, 0xcd => P65::op_cmp, 0xce => P65::op_dec, 0xcf => P65::op_unk, 
+		     0xd0 => P65::op_bne, 0xd1 => P65::op_cmp, 0xd2 => P65::op_unk, 0xd3 => P65::op_unk, 0xd4 => P65::op_unk, 0xd5 => P65::op_cmp, 0xd6 => P65::op_dec, 0xd7 => P65::op_unk, 0xd8 => P65::op_cld, 0xd9 => P65::op_cmp, 0xda => P65::op_unk, 0xdb => P65::op_unk, 0xdc => P65::op_unk, 0xdd => P65::op_cmp, 0xde => P65::op_dec, 0xdf => P65::op_unk, 
+		     0xe0 => P65::op_cpx, 0xe1 => P65::op_sbc, 0xe2 => P65::op_unk, 0xe3 => P65::op_unk, 0xe4 => P65::op_cpx, 0xe5 => P65::op_sbc, 0xe6 => P65::op_inc, 0xe7 => P65::op_unk, 0xe8 => P65::op_inx, 0xe9 => P65::op_sbc, 0xea => P65::op_nop, 0xeb => P65::op_unk, 0xec => P65::op_cpx, 0xed => P65::op_sbc, 0xee => P65::op_inc, 0xef => P65::op_unk, 
+		     0xf0 => P65::op_beq, 0xf1 => P65::op_sbc, 0xf2 => P65::op_unk, 0xf3 => P65::op_unk, 0xf4 => P65::op_unk, 0xf5 => P65::op_sbc, 0xf6 => P65::op_inc, 0xf7 => P65::op_unk, 0xf8 => P65::op_sed, 0xf9 => P65::op_sbc, 0xfa => P65::op_unk, 0xfb => P65::op_unk, 0xfc => P65::op_unk, 0xfd => P65::op_sbc, 0xfe => P65::op_inc, 0xff => P65::op_unk,
+             _ => P65::op_unk,  /* silly silly, op is a u8 */
+        }
     }       
-    #[allow(dead_code)]
-    fn op_name(op: u8) -> &'static str {
-        const OPTABLE: [&'static str; 256] = [
-// MSD LSD-> 0            1            2            3            4            5            6            7            8            9            a            b            c            d            e            f
-             "brk", "ora", "unk", "unk", "unk", "ora", "asl", "unk", "php", "ora", "asl", "unk", "unk", "ora", "asl", "unk",
- 		     "bpl", "ora", "unk", "unk", "unk", "ora", "asl", "unk", "clc", "ora", "unk", "unk", "unk", "ora", "asl", "unk", 
-		     "jsr", "and", "unk", "unk", "bit", "and", "rol", "unk", "plp", "and", "rol", "unk", "bit", "and", "rol", "unk", 
-		     "bmi", "and", "unk", "unk", "unk", "and", "rol", "unk", "sec", "and", "unk", "unk", "unk", "and", "rol", "unk", 
-		     "rti", "eor", "unk", "unk", "unk", "eor", "lsr", "unk", "pha", "eor", "lsr", "unk", "jmp", "eor", "lsr", "unk", 
-		     "bvc", "eor", "unk", "unk", "unk", "eor", "lsr", "unk", "cli", "eor", "unk", "unk", "unk", "eor", "lsr", "unk", 
-		     "rts", "adc", "unk", "unk", "unk", "adc", "ror", "unk", "pla", "adc", "ror", "unk", "jmp", "adc", "ror", "unk", 
-		     "bvs", "adc", "unk", "unk", "unk", "adc", "ror", "unk", "sei", "adc", "unk", "unk", "unk", "adc", "ror", "unk", 
-		     "unk", "sta", "unk", "unk", "sty", "sta", "stx", "unk", "dey", "unk", "txa", "unk", "sty", "sta", "stx", "unk", 
-		     "bcc", "sta", "unk", "unk", "sty", "sta", "stx", "unk", "tya", "sta", "txs", "unk", "unk", "sta", "unk", "unk", 
-		     "ldy", "lda", "ldx", "unk", "ldy", "lda", "ldx", "unk", "tay", "lda", "tax", "unk", "ldy", "lda", "ldx", "unk", 
-		     "bcs", "lda", "unk", "unk", "ldy", "lda", "ldx", "unk", "clv", "lda", "tsx", "unk", "ldy", "lda", "ldx", "unk", 
-		     "cpy", "cmp", "unk", "unk", "cpy", "cmp", "dec", "unk", "iny", "cmp", "dex", "unk", "cpy", "cmp", "dec", "unk", 
-		     "bne", "cmp", "unk", "unk", "unk", "cmp", "dec", "unk", "cld", "cmp", "unk", "unk", "unk", "cmp", "dec", "unk", 
-		     "cpx", "sbc", "unk", "unk", "cpx", "sbc", "inc", "unk", "inx", "sbc", "nop", "unk", "cpx", "sbc", "inc", "unk", 
-		     "beq", "sbc", "unk", "unk", "unk", "sbc", "inc", "unk", "sed", "sbc", "unk", "unk", "unk", "sbc", "inc", "unk",];
-            
-        OPTABLE[op as usize]
-    }       
-
 
     // now the addressing modes, divided by group of opcodes
 
@@ -706,145 +683,26 @@ impl P65 {
     // luckily it is optimized as a jump table by the compiler, because it's impossible in rust to make a const array of generic function pointers
     fn decode_addr_mode<M: Memory>(op: u8) -> AddrModeF<M> {
         match op {
-                 0x00 => { P65::brk_imp },0x01 => { P65::a2_ix} ,0x02 => { P65::ad_unk } ,0x03 => { P65::ad_unk },0x04 => { P65::ad_unk },0x05 => { P65::a2_zp  },0x06 => { P65::a4_zp  },0x07 => { P65::ad_unk },0x08 => { P65::a5_phx },0x09 => { P65::a2_imm },0x0a => { P65::a1_ac  },0x0b => { P65::ad_unk },0x0c => { P65::ad_unk } ,0x0d => { P65::a2_abs} ,0x0e => { P65::a4_abs }, 0x0f => { P65::ad_unk },
-                 0x10 => { P65::a5_bxx  },0x11 => { P65::a2_iy} ,0x12 => { P65::ad_unk } ,0x13 => { P65::ad_unk },0x14 => { P65::ad_unk },0x15 => { P65::a2_zpx },0x16 => { P65::a4_zpx },0x17 => { P65::ad_unk },0x18 => { P65::a1_imp },0x19 => { P65::a2_ay  },0x1a => { P65::ad_unk },0x1b => { P65::ad_unk },0x1c => { P65::ad_unk } ,0x1d => { P65::a2_ax } ,0x1e => { P65::a4_ax  }, 0x1f => { P65::ad_unk },
-                 0x20 => { P65::jsr_abs },0x21 => { P65::a2_ix} ,0x22 => { P65::ad_unk } ,0x23 => { P65::ad_unk },0x24 => { P65::a2_zp  },0x25 => { P65::a2_zp  },0x26 => { P65::a4_zp  },0x27 => { P65::ad_unk },0x28 => { P65::a5_plx },0x29 => { P65::a2_imm },0x2a => { P65::a1_ac  },0x2b => { P65::ad_unk },0x2c => { P65::a2_abs } ,0x2d => { P65::a2_abs} ,0x2e => { P65::a4_abs }, 0x2f => { P65::ad_unk },
-                 0x30 => { P65::a5_bxx  },0x31 => { P65::a2_iy} ,0x32 => { P65::ad_unk } ,0x33 => { P65::ad_unk },0x34 => { P65::ad_unk },0x35 => { P65::a2_zpx },0x36 => { P65::a4_zpx },0x37 => { P65::ad_unk },0x38 => { P65::a1_imp },0x39 => { P65::a2_ay  },0x3a => { P65::ad_unk },0x3b => { P65::ad_unk },0x3c => { P65::ad_unk } ,0x3d => { P65::a2_ax } ,0x3e => { P65::a4_ax  }, 0x3f => { P65::ad_unk },
-                 0x40 => { P65::rti_imp },0x41 => { P65::a2_ix} ,0x42 => { P65::ad_unk } ,0x43 => { P65::ad_unk },0x44 => { P65::ad_unk },0x45 => { P65::a2_zp  },0x46 => { P65::a4_zp  },0x47 => { P65::ad_unk },0x48 => { P65::a5_phx },0x49 => { P65::a2_imm },0x4a => { P65::a1_ac  },0x4b => { P65::ad_unk },0x4c => { P65::jmp_abs} ,0x4d => { P65::a2_abs} ,0x4e => { P65::a4_abs }, 0x4f => { P65::ad_unk },
-                 0x50 => { P65::a5_bxx  },0x51 => { P65::a2_iy} ,0x52 => { P65::ad_unk } ,0x53 => { P65::ad_unk },0x54 => { P65::ad_unk },0x55 => { P65::a2_zpx },0x56 => { P65::a4_zpx },0x57 => { P65::ad_unk },0x58 => { P65::a1_imp },0x59 => { P65::a2_ay  },0x5a => { P65::ad_unk },0x5b => { P65::ad_unk },0x5c => { P65::ad_unk } ,0x5d => { P65::a2_ax } ,0x5e => { P65::a4_ax  }, 0x5f => { P65::ad_unk },
-                 0x60 => { P65::rts_imp },0x61 => { P65::a2_ix} ,0x62 => { P65::ad_unk } ,0x63 => { P65::ad_unk },0x64 => { P65::ad_unk },0x65 => { P65::a2_zp  },0x66 => { P65::a4_zp  },0x67 => { P65::ad_unk },0x68 => { P65::a5_plx },0x69 => { P65::a2_imm },0x6a => { P65::a1_ac  },0x6b => { P65::ad_unk },0x6c => { P65::jmp_ind} ,0x6d => { P65::a2_abs} ,0x6e => { P65::a4_abs }, 0x6f => { P65::ad_unk },
-                 0x70 => { P65::a5_bxx  },0x71 => { P65::a2_iy} ,0x72 => { P65::ad_unk } ,0x73 => { P65::ad_unk },0x74 => { P65::ad_unk },0x75 => { P65::a2_zpx },0x76 => { P65::a4_zpx },0x77 => { P65::ad_unk },0x78 => { P65::a1_imp },0x79 => { P65::a2_ay  },0x7a => { P65::ad_unk },0x7b => { P65::ad_unk },0x7c => { P65::ad_unk } ,0x7d => { P65::a2_ax } ,0x7e => { P65::a4_ax  }, 0x7f => { P65::ad_unk },
-                 0x80 => { P65::ad_unk  },0x81 => { P65::a3_ix} ,0x82 => { P65::ad_unk } ,0x83 => { P65::ad_unk },0x84 => { P65::a3_zp  },0x85 => { P65::a3_zp  },0x86 => { P65::a3_zp  },0x87 => { P65::ad_unk },0x88 => { P65::a1_imp },0x89 => { P65::ad_unk },0x8a => { P65::a1_imp },0x8b => { P65::ad_unk },0x8c => { P65::a3_abs } ,0x8d => { P65::a3_abs} ,0x8e => { P65::a3_abs }, 0x8f => { P65::ad_unk },
-                 0x90 => { P65::a5_bxx  },0x91 => { P65::a3_iy} ,0x92 => { P65::ad_unk } ,0x93 => { P65::ad_unk },0x94 => { P65::a3_zpx },0x95 => { P65::a3_zpx },0x96 => { P65::a3_zpy },0x97 => { P65::ad_unk },0x98 => { P65::a1_imp },0x99 => { P65::a3_ay  },0x9a => { P65::a1_imp },0x9b => { P65::ad_unk },0x9c => { P65::ad_unk } ,0x9d => { P65::a3_ax } ,0x9e => { P65::ad_unk }, 0x9f => { P65::ad_unk },
-                 0xa0 => { P65::a2_imm  },0xa1 => { P65::a2_ix} ,0xa2 => { P65::a2_imm } ,0xa3 => { P65::ad_unk },0xa4 => { P65::a2_zp  },0xa5 => { P65::a2_zp  },0xa6 => { P65::a2_zp  },0xa7 => { P65::ad_unk },0xa8 => { P65::a1_imp },0xa9 => { P65::a2_imm },0xaa => { P65::a1_imp },0xab => { P65::ad_unk },0xac => { P65::a2_abs } ,0xad => { P65::a2_abs} ,0xae => { P65::a2_abs }, 0xaf => { P65::ad_unk },
-                 0xb0 => { P65::a5_bxx  },0xb1 => { P65::a2_iy} ,0xb2 => { P65::ad_unk } ,0xb3 => { P65::ad_unk },0xb4 => { P65::a2_zpx },0xb5 => { P65::a2_zpx },0xb6 => { P65::a2_zpy },0xb7 => { P65::ad_unk },0xb8 => { P65::a1_imp },0xb9 => { P65::a2_ay  },0xba => { P65::a1_imp },0xbb => { P65::ad_unk },0xbc => { P65::a2_ax  } ,0xbd => { P65::a2_ax } ,0xbe => { P65::a2_ay  }, 0xbf => { P65::ad_unk },
-                 0xc0 => { P65::a2_imm  },0xc1 => { P65::a2_ix} ,0xc2 => { P65::ad_unk } ,0xc3 => { P65::ad_unk },0xc4 => { P65::a2_zp  },0xc5 => { P65::a2_zp  },0xc6 => { P65::a4_zp  },0xc7 => { P65::ad_unk },0xc8 => { P65::a1_imp },0xc9 => { P65::a2_imm },0xca => { P65::a1_imp },0xcb => { P65::ad_unk },0xcc => { P65::a2_abs } ,0xcd => { P65::a2_abs} ,0xce => { P65::a4_abs }, 0xcf => { P65::ad_unk },
-                 0xd0 => { P65::a5_bxx  },0xd1 => { P65::a2_iy} ,0xd2 => { P65::ad_unk } ,0xd3 => { P65::ad_unk },0xd4 => { P65::ad_unk },0xd5 => { P65::a2_zpx },0xd6 => { P65::a4_zpx },0xd7 => { P65::ad_unk },0xd8 => { P65::a1_imp },0xd9 => { P65::a2_ay  },0xda => { P65::ad_unk },0xdb => { P65::ad_unk },0xdc => { P65::ad_unk } ,0xdd => { P65::a2_ax } ,0xde => { P65::a4_ax  }, 0xdf => { P65::ad_unk },
-                 0xe0 => { P65::a2_imm  },0xe1 => { P65::a2_ix} ,0xe2 => { P65::ad_unk } ,0xe3 => { P65::ad_unk },0xe4 => { P65::a2_zp  },0xe5 => { P65::a2_zp  },0xe6 => { P65::a4_zp  },0xe7 => { P65::ad_unk },0xe8 => { P65::a1_imp },0xe9 => { P65::a2_imm },0xea => { P65::a1_imp },0xeb => { P65::ad_unk },0xec => { P65::a2_abs } ,0xed => { P65::a2_abs} ,0xee => { P65::a4_abs }, 0xef => { P65::ad_unk },
-                 0xf0 => { P65::a5_bxx  },0xf1 => { P65::a2_iy} ,0xf2 => { P65::ad_unk } ,0xf3 => { P65::ad_unk },0xf4 => { P65::ad_unk },0xf5 => { P65::a2_zpx },0xf6 => { P65::a4_zpx },0xf7 => { P65::ad_unk },0xf8 => { P65::a1_imp },0xf9 => { P65::a2_ay  },0xfa => { P65::ad_unk },0xfb => { P65::ad_unk },0xfc => { P65::ad_unk } ,0xfd => { P65::a2_ax } ,0xfe => { P65::a4_ax  }, 0xff => { P65::ad_unk },
-                 _ => { P65::ad_unk }
+            0x00 => { P65::brk_imp },0x01 => { P65::a2_ix} ,0x02 => { P65::ad_unk } ,0x03 => { P65::ad_unk },0x04 => { P65::ad_unk },0x05 => { P65::a2_zp  },0x06 => { P65::a4_zp  },0x07 => { P65::ad_unk },0x08 => { P65::a5_phx },0x09 => { P65::a2_imm },0x0a => { P65::a1_ac  },0x0b => { P65::ad_unk },0x0c => { P65::ad_unk } ,0x0d => { P65::a2_abs} ,0x0e => { P65::a4_abs }, 0x0f => { P65::ad_unk },
+            0x10 => { P65::a5_bxx  },0x11 => { P65::a2_iy} ,0x12 => { P65::ad_unk } ,0x13 => { P65::ad_unk },0x14 => { P65::ad_unk },0x15 => { P65::a2_zpx },0x16 => { P65::a4_zpx },0x17 => { P65::ad_unk },0x18 => { P65::a1_imp },0x19 => { P65::a2_ay  },0x1a => { P65::ad_unk },0x1b => { P65::ad_unk },0x1c => { P65::ad_unk } ,0x1d => { P65::a2_ax } ,0x1e => { P65::a4_ax  }, 0x1f => { P65::ad_unk },
+            0x20 => { P65::jsr_abs },0x21 => { P65::a2_ix} ,0x22 => { P65::ad_unk } ,0x23 => { P65::ad_unk },0x24 => { P65::a2_zp  },0x25 => { P65::a2_zp  },0x26 => { P65::a4_zp  },0x27 => { P65::ad_unk },0x28 => { P65::a5_plx },0x29 => { P65::a2_imm },0x2a => { P65::a1_ac  },0x2b => { P65::ad_unk },0x2c => { P65::a2_abs } ,0x2d => { P65::a2_abs} ,0x2e => { P65::a4_abs }, 0x2f => { P65::ad_unk },
+            0x30 => { P65::a5_bxx  },0x31 => { P65::a2_iy} ,0x32 => { P65::ad_unk } ,0x33 => { P65::ad_unk },0x34 => { P65::ad_unk },0x35 => { P65::a2_zpx },0x36 => { P65::a4_zpx },0x37 => { P65::ad_unk },0x38 => { P65::a1_imp },0x39 => { P65::a2_ay  },0x3a => { P65::ad_unk },0x3b => { P65::ad_unk },0x3c => { P65::ad_unk } ,0x3d => { P65::a2_ax } ,0x3e => { P65::a4_ax  }, 0x3f => { P65::ad_unk },
+            0x40 => { P65::rti_imp },0x41 => { P65::a2_ix} ,0x42 => { P65::ad_unk } ,0x43 => { P65::ad_unk },0x44 => { P65::ad_unk },0x45 => { P65::a2_zp  },0x46 => { P65::a4_zp  },0x47 => { P65::ad_unk },0x48 => { P65::a5_phx },0x49 => { P65::a2_imm },0x4a => { P65::a1_ac  },0x4b => { P65::ad_unk },0x4c => { P65::jmp_abs} ,0x4d => { P65::a2_abs} ,0x4e => { P65::a4_abs }, 0x4f => { P65::ad_unk },
+            0x50 => { P65::a5_bxx  },0x51 => { P65::a2_iy} ,0x52 => { P65::ad_unk } ,0x53 => { P65::ad_unk },0x54 => { P65::ad_unk },0x55 => { P65::a2_zpx },0x56 => { P65::a4_zpx },0x57 => { P65::ad_unk },0x58 => { P65::a1_imp },0x59 => { P65::a2_ay  },0x5a => { P65::ad_unk },0x5b => { P65::ad_unk },0x5c => { P65::ad_unk } ,0x5d => { P65::a2_ax } ,0x5e => { P65::a4_ax  }, 0x5f => { P65::ad_unk },
+            0x60 => { P65::rts_imp },0x61 => { P65::a2_ix} ,0x62 => { P65::ad_unk } ,0x63 => { P65::ad_unk },0x64 => { P65::ad_unk },0x65 => { P65::a2_zp  },0x66 => { P65::a4_zp  },0x67 => { P65::ad_unk },0x68 => { P65::a5_plx },0x69 => { P65::a2_imm },0x6a => { P65::a1_ac  },0x6b => { P65::ad_unk },0x6c => { P65::jmp_ind} ,0x6d => { P65::a2_abs} ,0x6e => { P65::a4_abs }, 0x6f => { P65::ad_unk },
+            0x70 => { P65::a5_bxx  },0x71 => { P65::a2_iy} ,0x72 => { P65::ad_unk } ,0x73 => { P65::ad_unk },0x74 => { P65::ad_unk },0x75 => { P65::a2_zpx },0x76 => { P65::a4_zpx },0x77 => { P65::ad_unk },0x78 => { P65::a1_imp },0x79 => { P65::a2_ay  },0x7a => { P65::ad_unk },0x7b => { P65::ad_unk },0x7c => { P65::ad_unk } ,0x7d => { P65::a2_ax } ,0x7e => { P65::a4_ax  }, 0x7f => { P65::ad_unk },
+            0x80 => { P65::ad_unk  },0x81 => { P65::a3_ix} ,0x82 => { P65::ad_unk } ,0x83 => { P65::ad_unk },0x84 => { P65::a3_zp  },0x85 => { P65::a3_zp  },0x86 => { P65::a3_zp  },0x87 => { P65::ad_unk },0x88 => { P65::a1_imp },0x89 => { P65::ad_unk },0x8a => { P65::a1_imp },0x8b => { P65::ad_unk },0x8c => { P65::a3_abs } ,0x8d => { P65::a3_abs} ,0x8e => { P65::a3_abs }, 0x8f => { P65::ad_unk },
+            0x90 => { P65::a5_bxx  },0x91 => { P65::a3_iy} ,0x92 => { P65::ad_unk } ,0x93 => { P65::ad_unk },0x94 => { P65::a3_zpx },0x95 => { P65::a3_zpx },0x96 => { P65::a3_zpy },0x97 => { P65::ad_unk },0x98 => { P65::a1_imp },0x99 => { P65::a3_ay  },0x9a => { P65::a1_imp },0x9b => { P65::ad_unk },0x9c => { P65::ad_unk } ,0x9d => { P65::a3_ax } ,0x9e => { P65::ad_unk }, 0x9f => { P65::ad_unk },
+            0xa0 => { P65::a2_imm  },0xa1 => { P65::a2_ix} ,0xa2 => { P65::a2_imm } ,0xa3 => { P65::ad_unk },0xa4 => { P65::a2_zp  },0xa5 => { P65::a2_zp  },0xa6 => { P65::a2_zp  },0xa7 => { P65::ad_unk },0xa8 => { P65::a1_imp },0xa9 => { P65::a2_imm },0xaa => { P65::a1_imp },0xab => { P65::ad_unk },0xac => { P65::a2_abs } ,0xad => { P65::a2_abs} ,0xae => { P65::a2_abs }, 0xaf => { P65::ad_unk },
+            0xb0 => { P65::a5_bxx  },0xb1 => { P65::a2_iy} ,0xb2 => { P65::ad_unk } ,0xb3 => { P65::ad_unk },0xb4 => { P65::a2_zpx },0xb5 => { P65::a2_zpx },0xb6 => { P65::a2_zpy },0xb7 => { P65::ad_unk },0xb8 => { P65::a1_imp },0xb9 => { P65::a2_ay  },0xba => { P65::a1_imp },0xbb => { P65::ad_unk },0xbc => { P65::a2_ax  } ,0xbd => { P65::a2_ax } ,0xbe => { P65::a2_ay  }, 0xbf => { P65::ad_unk },
+            0xc0 => { P65::a2_imm  },0xc1 => { P65::a2_ix} ,0xc2 => { P65::ad_unk } ,0xc3 => { P65::ad_unk },0xc4 => { P65::a2_zp  },0xc5 => { P65::a2_zp  },0xc6 => { P65::a4_zp  },0xc7 => { P65::ad_unk },0xc8 => { P65::a1_imp },0xc9 => { P65::a2_imm },0xca => { P65::a1_imp },0xcb => { P65::ad_unk },0xcc => { P65::a2_abs } ,0xcd => { P65::a2_abs} ,0xce => { P65::a4_abs }, 0xcf => { P65::ad_unk },
+            0xd0 => { P65::a5_bxx  },0xd1 => { P65::a2_iy} ,0xd2 => { P65::ad_unk } ,0xd3 => { P65::ad_unk },0xd4 => { P65::ad_unk },0xd5 => { P65::a2_zpx },0xd6 => { P65::a4_zpx },0xd7 => { P65::ad_unk },0xd8 => { P65::a1_imp },0xd9 => { P65::a2_ay  },0xda => { P65::ad_unk },0xdb => { P65::ad_unk },0xdc => { P65::ad_unk } ,0xdd => { P65::a2_ax } ,0xde => { P65::a4_ax  }, 0xdf => { P65::ad_unk },
+            0xe0 => { P65::a2_imm  },0xe1 => { P65::a2_ix} ,0xe2 => { P65::ad_unk } ,0xe3 => { P65::ad_unk },0xe4 => { P65::a2_zp  },0xe5 => { P65::a2_zp  },0xe6 => { P65::a4_zp  },0xe7 => { P65::ad_unk },0xe8 => { P65::a1_imp },0xe9 => { P65::a2_imm },0xea => { P65::a1_imp },0xeb => { P65::ad_unk },0xec => { P65::a2_abs } ,0xed => { P65::a2_abs} ,0xee => { P65::a4_abs }, 0xef => { P65::ad_unk },
+            0xf0 => { P65::a5_bxx  },0xf1 => { P65::a2_iy} ,0xf2 => { P65::ad_unk } ,0xf3 => { P65::ad_unk },0xf4 => { P65::ad_unk },0xf5 => { P65::a2_zpx },0xf6 => { P65::a4_zpx },0xf7 => { P65::ad_unk },0xf8 => { P65::a1_imp },0xf9 => { P65::a2_ay  },0xfa => { P65::ad_unk },0xfb => { P65::ad_unk },0xfc => { P65::ad_unk } ,0xfd => { P65::a2_ax } ,0xfe => { P65::a4_ax  }, 0xff => { P65::ad_unk },
+            _ => { P65::ad_unk }
         }
 
     }    
-
-
-
-    // quick'n'dirty addressing mode disassembler, very useful to debug the simulator itself
-    #[allow(dead_code)]
-    fn addr_string(op: u8, v1: u16) -> String {
-        match op & 0x0F {
-        0x00 =>  {   
-            if op & 0x10 != 0 {
-                format!("${:02x}",(v1 & 0xFF) as i8) /* bxx */
-            } else {
-                if op == 0x00 || op == 0x40 || op == 0x60  { 
-                    "".to_string() /* imp */
-                } else if op == 0x20 { 
-                    format!("${:04x}", v1)  /* jsr abs */ 
-                } else if op == 0x80 { 
-                    "NOP*".to_string()
-                } else { 
-                    format!("#${:2x}", (v1 & 0xFF) as u8) /* imm */ 
-                }
-            }},
-        0x01 => {
-            if op & 0x10 == 0 { /* ix */
-                 format!("(${:02x},X)", (v1 & 0xFF) as u8)
-            }
-            else { /* iy */ 
-                 format!("(${:02x},Y)", (v1 & 0xFF) as u8)
-            }},
-        0x02 => {
-            if op == 0xa2 { /* imm */ 
-                format!("#${:02x}", (v1 & 0xFF) as u8)
-            } else { "UNK".to_string() }},
-        0x03 => { "UNK".to_string() },
-        0x04 => { 
-            if op == 0x24 || op == 0x84 || op == 0xa4 || op == 0xc4 || op == 0xe4 { /* zp */
-                format!("${:02x}", (v1 & 0xFF) as u8)                
-            } else if op == 0x94 || op == 0xb4 { /* zpx */
-                format!("${:02x},X", (v1 &0xFF) as u8)                
-            } else { 
-                "UNK".to_string()
-            }},
-        0x05 => { 
-            if op & 0x10 == 0 { /* zp */
-                format!("${:02x}", (v1 & 0xFF) as u8)                
-            } else { /* zpx */
-                format!("${:02x},X", (v1 & 0xFF) as u8)
-            }},
-        0x06 => { 
-            if op & 0x10 == 0 {
-                if op == 0x96 || op == 0xb6 { /* zpy */ 
-                    format!("${:02x},Y", (v1 & 0xFF) as u8)
-                } else { /* zpx */ 
-                    format!("${:02x},X", (v1 & 0xFF) as u8)
-                }
-            } else {  /* zp */ 
-                format!("${:02x}", (v1 & 0xFF) as u8)                
-            }},
-        0x07 => { "UNK".to_string() /* unk */ },
-        0x08 => { "".to_string() /* imp */ },
-        0x09 => {
-            if op & 0x10 == 0 {
-                if op == 0x89 { 
-                    "UNK".to_string()
-                } else { /* imm */ 
-                    format!("#${:02x}", (v1 & 0xFF) as u8)
-                }
-            } else { 
-                /* ay */ 
-                format!("${:04x},Y", v1) 
-            }},
-        0x0A => { 
-            if op < 0x8A {
-                if op & 0x10 == 0 { 
-                    "".to_string() /* acc */ 
-                } else { 
-                    "UNK".to_string() /* unk */ 
-                }
-            } else {
-                if op == 0xDA || op == 0xFA { 
-                    "UNK".to_string() /* unk */ 
-                } else { "".to_string() /* imp */ }
-            }},
-        0x0B => { "UNK".to_string() /* unk */ },
-        0x0C => { 
-            if op & 0x10 == 0 {
-                if op == 0x0C { 
-                    "UNK".to_string() 
-                } else if op == 0x4C { /* jmp ind */ 
-                    format!("(${:04x})", v1)
-                } else { /* abs */
-                    format!("${:04x}", v1) 
-                }
-            } else if op == 0xBC { /* ax */ 
-                format!("${:04x},X", v1)  
-            } else { 
-                "UNK".to_string() 
-            }}, 
-        0x0D => { 
-            if op & 0x10 == 0 { /* abs */ 
-                format!("${:04x}", v1) 
-            } else { /* ax */
-                format!("${:04x},X", v1)  
-            }},
-        0x0E => { 
-            if op & 0x10 == 0 {                /* abs */
-                format!("${:04x}", v1) 
-            } else {
-                if op == 0x9e { 
-                    "UNK".to_string()
-                } else if op == 0xbe { /* ay */
-                    format!("${:04x},Y", v1)  
-                } else { /* ax */
-                    format!("${:04x},X", v1)  
-                }
-            }},
-        0x0F => { "UNK".to_string() /* UNK */ },
-        _ => { "".to_string() /* not that smart rust, there are at most 16 cases */ },     
-        }
-    }
 
     // we fake this.
     pub fn reset<M: Memory>(&mut self, mem: &mut M) {
