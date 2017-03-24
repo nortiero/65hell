@@ -53,7 +53,7 @@ pub struct P65 {
     al: u8,
 }
 
-type AddrModeF = fn(&mut P65, &mut Memory,  fn(&mut P65));
+type AddrModeF<M: Memory> = fn(&mut P65, &mut M,  fn(&mut P65));
 type OpcodeF = fn(&mut P65);
 
 impl fmt::Debug for P65 {
@@ -330,21 +330,21 @@ impl P65 {
 
     // now the addressing modes, divided by group of opcodes
 
-    fn a1_ac(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a1_ac<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { mem.read(self.pc as usize); },      // discard read
             2 => { self.v1 = self.a; opfun(self); self.a = self.v1; self.fetch_op(mem); }
             _ => {},
         }
     }
-    fn a1_imp(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a1_imp<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { mem.read(self.pc as usize); },      // discard read
             2 => { opfun(self); self.fetch_op(mem); }
             _ => {},
         }
     }
-    fn a2_ix(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_ix<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al = mem.read(self.pc as usize); self.inc_pc(); },
             2 => { mem.read(self.al as usize);  self.v1 = self.al.wrapping_add(self.x); },    // discd read
@@ -355,7 +355,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a2_imm(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_imm<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.v1 =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { opfun(self); self.fetch_op(mem); }
@@ -368,7 +368,7 @@ impl P65 {
 //         (m.read(usize::try_from(a).unwrap()))
 //    }
 
-    fn a2_zp(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_zp<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { self.v1 =  mem.read(self.al as usize); },
@@ -376,7 +376,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a2_abs(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_abs<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { self.ah =  (mem.read(self.pc as usize)); self.inc_pc(); },
@@ -385,7 +385,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a2_iy(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_iy<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.v1 =  (mem.read(self.pc as usize));  self.inc_pc(); },
             2 => { self.al =  (mem.read(self.v1 as usize));  self.v1 = self.v1.wrapping_add(1); },
@@ -400,7 +400,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a2_zpx(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_zpx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { mem.read(self.al as usize); self.al = self.al.wrapping_add(self.x); },  //discard read
@@ -409,7 +409,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a2_zpy(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_zpy<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { mem.read(self.al as usize); self.al = self.al.wrapping_add(self.y); },  //discard read
@@ -418,7 +418,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a2_ay(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_ay<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
             2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc(); 
@@ -432,7 +432,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a2_ax(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a2_ax<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
             2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc();
@@ -447,7 +447,7 @@ impl P65 {
         }
     }
     
-    fn a3_zp(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a3_zp<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { opfun(self); mem.write(self.al as usize, self.v1); },
@@ -456,7 +456,7 @@ impl P65 {
         }
     }
 
-    fn a3_abs(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a3_abs<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { self.ah =  (mem.read(self.pc as usize)); self.inc_pc(); },
@@ -465,7 +465,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a3_ix(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a3_ix<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
             2 => { mem.read(self.al as usize);                     self.v1 = self.al.wrapping_add(self.x); },     // discard read
@@ -476,7 +476,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a3_ax(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a3_ax<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
             2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc();
@@ -489,7 +489,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a3_ay(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a3_ay<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
             2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc();
@@ -502,7 +502,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a3_zpx(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a3_zpx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { mem.read(self.al as usize);       self.al = self.al.wrapping_add(self.x);          },  // discard  
@@ -511,7 +511,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a3_zpy(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a3_zpy<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { mem.read(self.al as usize);       self.al = self.al.wrapping_add(self.y);          },  // discard  
@@ -520,7 +520,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a3_iy(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a3_iy<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.v1 =  (mem.read(self.pc as usize));  self.inc_pc(); },
             2 => { self.al =  (mem.read(self.v1 as usize));  self.v1 = self.v1.wrapping_add(1); },
@@ -533,7 +533,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a4_zp(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a4_zp<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { self.v1 =  (mem.read(self.al as usize));                },
@@ -543,7 +543,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a4_zpx(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a4_zpx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { mem.read(self.al as usize); self.al = self.al.wrapping_add(self.x); },                 //discard read
@@ -554,7 +554,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn a4_ax(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a4_ax<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize));  self.inc_pc(); },
             2 => { self.ah =  (mem.read(self.pc as usize));  self.inc_pc();
@@ -569,7 +569,7 @@ impl P65 {
         }
     }
 
-    fn a4_abs(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a4_abs<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.al =  (mem.read(self.pc as usize)); self.inc_pc(); },
             2 => { self.ah =  (mem.read(self.pc as usize)); self.inc_pc(); },
@@ -581,7 +581,7 @@ impl P65 {
         }
     }
     
-    fn jsr_abs(&mut self, mem: &mut Memory, _: fn(&mut Self)) {
+    fn jsr_abs<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
  //       println!("qui!!");
         match self.ts {
             1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
@@ -601,7 +601,7 @@ impl P65 {
     // when serving IRQs (caveats) B will be zero, at least on the stack -- don't know
     // if you can push it and it is 1/0
     // check: http://visual6502.org/wiki/index.php?title=6502_BRK_and_B_bit
-    fn brk_imp(&mut self, mem: &mut Memory, _: fn(&mut Self)) {
+    fn brk_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
             1 => { mem.read(self.pc as usize); self.inc_pc(); self.p.b = true; },                // discard read. pc has been incremented earlier
             2 => { mem.write((self.s as usize) + 0x100, (self.pc >> 8) as u8);   self.dec_sp();  },
@@ -613,7 +613,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn rti_imp(&mut self, mem: &mut Memory, _: fn(&mut Self)) {
+    fn rti_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
             1 => { mem.read(self.pc as usize);    self.inc_pc(); },   // discard read
             2 => { mem.read((self.s as usize) + 0x100); self.inc_sp(); },     // discard read too
@@ -630,7 +630,7 @@ impl P65 {
         }
     }
 
-    fn jmp_abs(&mut self, mem: &mut Memory, _: fn(&mut Self)) {
+    fn jmp_abs<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
             1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { self.ah =  mem.read(self.pc as usize); self.inc_pc(); },
@@ -639,7 +639,7 @@ impl P65 {
         }
     }
 
-    fn jmp_ind(&mut self, mem: &mut Memory, _: fn(&mut Self)) {
+    fn jmp_ind<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
             1 => { self.al =  mem.read(self.pc as usize); self.inc_pc(); },
             2 => { self.ah =  mem.read(self.pc as usize); self.inc_pc(); },
@@ -649,7 +649,7 @@ impl P65 {
             _ => {},
         }
     }
-    fn rts_imp(&mut self, mem: &mut Memory, _: fn(&mut Self)) {
+    fn rts_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
             1 => { mem.read(self.pc as usize);    self.inc_pc(); },   // discard read
             2 => { mem.read((self.s as usize) + 0x100); self.inc_sp(); },     // discard read too
@@ -661,7 +661,7 @@ impl P65 {
         }
     }
 
-    fn a5_bxx(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a5_bxx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.v1 =  mem.read(self.pc as usize); self.inc_pc();  opfun(self);   },    // skip to 4 if branch not taken. relative jump is calculated from nextop address
             2 => { mem.read(self.pc as usize);
@@ -680,7 +680,7 @@ impl P65 {
         }
     }
 
-    fn a5_plx(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a5_plx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { mem.read(self.pc as usize); },                                 // discard read
             2 => { mem.read((self.s as usize) + 0x100); self.inc_sp();  },        // discard read
@@ -690,7 +690,7 @@ impl P65 {
         }
     }
 
-    fn a5_phx(&mut self, mem: &mut Memory, opfun: OpcodeF) {
+    fn a5_phx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { mem.read(self.pc as usize); },                                 // discard read (don't incpc)
             2 => { opfun(self);  mem.write((self.s as usize) + 0x100, self.v1);     self.dec_sp(); },
@@ -699,32 +699,36 @@ impl P65 {
         }
     }
 
-    fn ad_unk(&mut self, _: &mut Memory, _: fn(&mut Self)) {
+    fn ad_unk<M: Memory>(&mut self, _: &mut M, _: fn(&mut Self)) {
         panic!("Unknown OP: {:x}  PC: {:x}", self.op, self.pc);
     }
 
-    fn decode_addr_mode(op: u8) -> AddrModeF {
-        const ADDRTABLE: [AddrModeF; 256] = [
-			 P65::brk_imp ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a5_phx ,P65::a2_imm, P65::a1_ac  ,P65::ad_unk ,P65::ad_unk  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-			 P65::jsr_abs ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a5_plx ,P65::a2_imm ,P65::a1_ac  ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-			 P65::rti_imp ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a5_phx ,P65::a2_imm ,P65::a1_ac  ,P65::ad_unk ,P65::jmp_abs ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-			 P65::rts_imp ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a5_plx ,P65::a2_imm ,P65::a1_ac  ,P65::ad_unk ,P65::jmp_ind ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-			 P65::ad_unk  ,P65::a3_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a3_zp  ,P65::a3_zp  ,P65::a3_zp  ,P65::ad_unk ,P65::a1_imp ,P65::ad_unk ,P65::a1_imp ,P65::ad_unk ,P65::a3_abs  ,P65::a3_abs ,P65::a3_abs ,P65::ad_unk,
-			 P65::a5_bxx  ,P65::a3_iy ,P65::ad_unk  ,P65::ad_unk ,P65::a3_zpx ,P65::a3_zpx ,P65::a3_zpy ,P65::ad_unk ,P65::a1_imp ,P65::a3_ay  ,P65::a1_imp ,P65::ad_unk ,P65::ad_unk  ,P65::a3_ax  ,P65::ad_unk ,P65::ad_unk,
-			 P65::a2_imm  ,P65::a2_ix ,P65::a2_imm  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a2_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a2_abs ,P65::ad_unk,
-			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zpx ,P65::a2_zpx ,P65::a2_zpy ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::a1_imp ,P65::ad_unk ,P65::a2_ax   ,P65::a2_ax  ,P65::a2_ay  ,P65::ad_unk,
-			 P65::a2_imm  ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-			 P65::a2_imm  ,P65::a2_ix ,P65::ad_unk  ,P65::ad_unk ,P65::a2_zp  ,P65::a2_zp  ,P65::a4_zp  ,P65::ad_unk ,P65::a1_imp ,P65::a2_imm ,P65::a1_imp ,P65::ad_unk ,P65::a2_abs  ,P65::a2_abs ,P65::a4_abs ,P65::ad_unk,
-			 P65::a5_bxx  ,P65::a2_iy ,P65::ad_unk  ,P65::ad_unk ,P65::ad_unk ,P65::a2_zpx ,P65::a4_zpx ,P65::ad_unk ,P65::a1_imp ,P65::a2_ay  ,P65::ad_unk ,P65::ad_unk ,P65::ad_unk  ,P65::a2_ax  ,P65::a4_ax  ,P65::ad_unk,
-        ]   ;
-        ADDRTABLE[op as usize]
-    }
-    
+    // luckily it is optimized as a jump table by the compiler, because it's impossible in rust to make a const array of generic function pointers
+    fn decode_addr_mode<M: Memory>(op: u8) -> AddrModeF<M> {
+        match op {
+                 0x00 => { P65::brk_imp },0x01 => { P65::a2_ix} ,0x02 => { P65::ad_unk } ,0x03 => { P65::ad_unk },0x04 => { P65::ad_unk },0x05 => { P65::a2_zp  },0x06 => { P65::a4_zp  },0x07 => { P65::ad_unk },0x08 => { P65::a5_phx },0x09 => { P65::a2_imm },0x0a => { P65::a1_ac  },0x0b => { P65::ad_unk },0x0c => { P65::ad_unk } ,0x0d => { P65::a2_abs} ,0x0e => { P65::a4_abs }, 0x0f => { P65::ad_unk },
+                 0x10 => { P65::a5_bxx  },0x11 => { P65::a2_iy} ,0x12 => { P65::ad_unk } ,0x13 => { P65::ad_unk },0x14 => { P65::ad_unk },0x15 => { P65::a2_zpx },0x16 => { P65::a4_zpx },0x17 => { P65::ad_unk },0x18 => { P65::a1_imp },0x19 => { P65::a2_ay  },0x1a => { P65::ad_unk },0x1b => { P65::ad_unk },0x1c => { P65::ad_unk } ,0x1d => { P65::a2_ax } ,0x1e => { P65::a4_ax  }, 0x1f => { P65::ad_unk },
+                 0x20 => { P65::jsr_abs },0x21 => { P65::a2_ix} ,0x22 => { P65::ad_unk } ,0x23 => { P65::ad_unk },0x24 => { P65::a2_zp  },0x25 => { P65::a2_zp  },0x26 => { P65::a4_zp  },0x27 => { P65::ad_unk },0x28 => { P65::a5_plx },0x29 => { P65::a2_imm },0x2a => { P65::a1_ac  },0x2b => { P65::ad_unk },0x2c => { P65::a2_abs } ,0x2d => { P65::a2_abs} ,0x2e => { P65::a4_abs }, 0x2f => { P65::ad_unk },
+                 0x30 => { P65::a5_bxx  },0x31 => { P65::a2_iy} ,0x32 => { P65::ad_unk } ,0x33 => { P65::ad_unk },0x34 => { P65::ad_unk },0x35 => { P65::a2_zpx },0x36 => { P65::a4_zpx },0x37 => { P65::ad_unk },0x38 => { P65::a1_imp },0x39 => { P65::a2_ay  },0x3a => { P65::ad_unk },0x3b => { P65::ad_unk },0x3c => { P65::ad_unk } ,0x3d => { P65::a2_ax } ,0x3e => { P65::a4_ax  }, 0x3f => { P65::ad_unk },
+                 0x40 => { P65::rti_imp },0x41 => { P65::a2_ix} ,0x42 => { P65::ad_unk } ,0x43 => { P65::ad_unk },0x44 => { P65::ad_unk },0x45 => { P65::a2_zp  },0x46 => { P65::a4_zp  },0x47 => { P65::ad_unk },0x48 => { P65::a5_phx },0x49 => { P65::a2_imm },0x4a => { P65::a1_ac  },0x4b => { P65::ad_unk },0x4c => { P65::jmp_abs} ,0x4d => { P65::a2_abs} ,0x4e => { P65::a4_abs }, 0x4f => { P65::ad_unk },
+                 0x50 => { P65::a5_bxx  },0x51 => { P65::a2_iy} ,0x52 => { P65::ad_unk } ,0x53 => { P65::ad_unk },0x54 => { P65::ad_unk },0x55 => { P65::a2_zpx },0x56 => { P65::a4_zpx },0x57 => { P65::ad_unk },0x58 => { P65::a1_imp },0x59 => { P65::a2_ay  },0x5a => { P65::ad_unk },0x5b => { P65::ad_unk },0x5c => { P65::ad_unk } ,0x5d => { P65::a2_ax } ,0x5e => { P65::a4_ax  }, 0x5f => { P65::ad_unk },
+                 0x60 => { P65::rts_imp },0x61 => { P65::a2_ix} ,0x62 => { P65::ad_unk } ,0x63 => { P65::ad_unk },0x64 => { P65::ad_unk },0x65 => { P65::a2_zp  },0x66 => { P65::a4_zp  },0x67 => { P65::ad_unk },0x68 => { P65::a5_plx },0x69 => { P65::a2_imm },0x6a => { P65::a1_ac  },0x6b => { P65::ad_unk },0x6c => { P65::jmp_ind} ,0x6d => { P65::a2_abs} ,0x6e => { P65::a4_abs }, 0x6f => { P65::ad_unk },
+                 0x70 => { P65::a5_bxx  },0x71 => { P65::a2_iy} ,0x72 => { P65::ad_unk } ,0x73 => { P65::ad_unk },0x74 => { P65::ad_unk },0x75 => { P65::a2_zpx },0x76 => { P65::a4_zpx },0x77 => { P65::ad_unk },0x78 => { P65::a1_imp },0x79 => { P65::a2_ay  },0x7a => { P65::ad_unk },0x7b => { P65::ad_unk },0x7c => { P65::ad_unk } ,0x7d => { P65::a2_ax } ,0x7e => { P65::a4_ax  }, 0x7f => { P65::ad_unk },
+                 0x80 => { P65::ad_unk  },0x81 => { P65::a3_ix} ,0x82 => { P65::ad_unk } ,0x83 => { P65::ad_unk },0x84 => { P65::a3_zp  },0x85 => { P65::a3_zp  },0x86 => { P65::a3_zp  },0x87 => { P65::ad_unk },0x88 => { P65::a1_imp },0x89 => { P65::ad_unk },0x8a => { P65::a1_imp },0x8b => { P65::ad_unk },0x8c => { P65::a3_abs } ,0x8d => { P65::a3_abs} ,0x8e => { P65::a3_abs }, 0x8f => { P65::ad_unk },
+                 0x90 => { P65::a5_bxx  },0x91 => { P65::a3_iy} ,0x92 => { P65::ad_unk } ,0x93 => { P65::ad_unk },0x94 => { P65::a3_zpx },0x95 => { P65::a3_zpx },0x96 => { P65::a3_zpy },0x97 => { P65::ad_unk },0x98 => { P65::a1_imp },0x99 => { P65::a3_ay  },0x9a => { P65::a1_imp },0x9b => { P65::ad_unk },0x9c => { P65::ad_unk } ,0x9d => { P65::a3_ax } ,0x9e => { P65::ad_unk }, 0x9f => { P65::ad_unk },
+                 0xa0 => { P65::a2_imm  },0xa1 => { P65::a2_ix} ,0xa2 => { P65::a2_imm } ,0xa3 => { P65::ad_unk },0xa4 => { P65::a2_zp  },0xa5 => { P65::a2_zp  },0xa6 => { P65::a2_zp  },0xa7 => { P65::ad_unk },0xa8 => { P65::a1_imp },0xa9 => { P65::a2_imm },0xaa => { P65::a1_imp },0xab => { P65::ad_unk },0xac => { P65::a2_abs } ,0xad => { P65::a2_abs} ,0xae => { P65::a2_abs }, 0xaf => { P65::ad_unk },
+                 0xb0 => { P65::a5_bxx  },0xb1 => { P65::a2_iy} ,0xb2 => { P65::ad_unk } ,0xb3 => { P65::ad_unk },0xb4 => { P65::a2_zpx },0xb5 => { P65::a2_zpx },0xb6 => { P65::a2_zpy },0xb7 => { P65::ad_unk },0xb8 => { P65::a1_imp },0xb9 => { P65::a2_ay  },0xba => { P65::a1_imp },0xbb => { P65::ad_unk },0xbc => { P65::a2_ax  } ,0xbd => { P65::a2_ax } ,0xbe => { P65::a2_ay  }, 0xbf => { P65::ad_unk },
+                 0xc0 => { P65::a2_imm  },0xc1 => { P65::a2_ix} ,0xc2 => { P65::ad_unk } ,0xc3 => { P65::ad_unk },0xc4 => { P65::a2_zp  },0xc5 => { P65::a2_zp  },0xc6 => { P65::a4_zp  },0xc7 => { P65::ad_unk },0xc8 => { P65::a1_imp },0xc9 => { P65::a2_imm },0xca => { P65::a1_imp },0xcb => { P65::ad_unk },0xcc => { P65::a2_abs } ,0xcd => { P65::a2_abs} ,0xce => { P65::a4_abs }, 0xcf => { P65::ad_unk },
+                 0xd0 => { P65::a5_bxx  },0xd1 => { P65::a2_iy} ,0xd2 => { P65::ad_unk } ,0xd3 => { P65::ad_unk },0xd4 => { P65::ad_unk },0xd5 => { P65::a2_zpx },0xd6 => { P65::a4_zpx },0xd7 => { P65::ad_unk },0xd8 => { P65::a1_imp },0xd9 => { P65::a2_ay  },0xda => { P65::ad_unk },0xdb => { P65::ad_unk },0xdc => { P65::ad_unk } ,0xdd => { P65::a2_ax } ,0xde => { P65::a4_ax  }, 0xdf => { P65::ad_unk },
+                 0xe0 => { P65::a2_imm  },0xe1 => { P65::a2_ix} ,0xe2 => { P65::ad_unk } ,0xe3 => { P65::ad_unk },0xe4 => { P65::a2_zp  },0xe5 => { P65::a2_zp  },0xe6 => { P65::a4_zp  },0xe7 => { P65::ad_unk },0xe8 => { P65::a1_imp },0xe9 => { P65::a2_imm },0xea => { P65::a1_imp },0xeb => { P65::ad_unk },0xec => { P65::a2_abs } ,0xed => { P65::a2_abs} ,0xee => { P65::a4_abs }, 0xef => { P65::ad_unk },
+                 0xf0 => { P65::a5_bxx  },0xf1 => { P65::a2_iy} ,0xf2 => { P65::ad_unk } ,0xf3 => { P65::ad_unk },0xf4 => { P65::ad_unk },0xf5 => { P65::a2_zpx },0xf6 => { P65::a4_zpx },0xf7 => { P65::ad_unk },0xf8 => { P65::a1_imp },0xf9 => { P65::a2_ay  },0xfa => { P65::ad_unk },0xfb => { P65::ad_unk },0xfc => { P65::ad_unk } ,0xfd => { P65::a2_ax } ,0xfe => { P65::a4_ax  }, 0xff => { P65::ad_unk },
+                 _ => { P65::ad_unk }
+        }
+
+    }    
+
+
+
     // quick'n'dirty addressing mode disassembler, very useful to debug the simulator itself
     #[allow(dead_code)]
     fn addr_string(op: u8, v1: u16) -> String {
@@ -843,7 +847,7 @@ impl P65 {
     }
 
     // we fake this.
-    pub fn reset(&mut self, mem: &mut Memory) {
+    pub fn reset<M: Memory>(&mut self, mem: &mut M) {
         self.s =   0xFD;
         self.op =  0x00;
         self.al =  mem.read(0xFFFC);
@@ -854,10 +858,10 @@ impl P65 {
         self.cycle = 8;
     }
 
-    pub fn run(&mut self, mem: &mut Memory, count: u64) -> u64 {
+    pub fn run<M: Memory>(&mut self, mem: &mut M, count: u64) -> u64 {
         for _ in 0..count {
             let opfun = P65::decode_op(self.op);
-            let opaddr = P65::decode_addr_mode(self.op);
+            let opaddr = P65::decode_addr_mode::<M>(self.op);
             opaddr(self, mem, opfun);
             self.tick();
         }
