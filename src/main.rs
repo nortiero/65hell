@@ -23,18 +23,24 @@ fn main() {
     let mut pr = P65::new();
     let mut mem = MemoryArray::new(65536).unwrap();        // the full awesome power of 64KB at the tip of your fingers
 
+/* basic
 
     let mut f = std::fs::File::open("tests/ehbasic.bin").unwrap();
     let rs = f.read_exact(&mut mem.0[0xC000 ..]).unwrap();
     
     pr.reset(&mut mem);
 
-//    per i test
-//    pr.pc =  0x400;
-//    pr.fetch_op(&mut mem);
-//    pr.tick();
-//    pr.cycle = 8;
-        
+*/
+
+  //tests
+  // test actually run in 1.46s on my machine when --release'd
+    let mut f = std::fs::File::open("tests/fxa.bin").unwrap();
+    let rs = f.read_exact(&mut mem.0[0x000A ..]).unwrap();
+    mem.write(0xFFFC, 0x00);
+    mem.write(0xFFFD, 0x04);
+    pr.reset(&mut mem);
+  // end tests
+
 //    let mut oldpc = 0xFFFFu16;
     loop {
         let c = stdin.next();
@@ -54,6 +60,7 @@ fn main() {
         }
         pr.run(&mut mem, 10_000);
         stdout.flush().unwrap();
+        if mem.read(0x200) == 240 { println!("fine al ciclo: {}", pr.cycle); break; }
     }
     
 /*

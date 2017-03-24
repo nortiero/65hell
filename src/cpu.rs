@@ -1,4 +1,4 @@
-
+#![allow(unused_parens)]
 use std::fmt;
 
 // simple trait for memory operations
@@ -44,7 +44,7 @@ pub struct P65 {
     pc: u16,
 
 // emulator state
-    cycle: u64,
+    pub cycle: u64,
     ts: u8,
     op: u8,
     v1: u8,
@@ -649,12 +649,6 @@ impl P65 {
             _ => {},
         }
     }
-    // FIXME check in RTS l'indirizzo di ritorno è ok
-    // in RTI è l'indirizzo -1
-
-
-
-    // FIXME DAVVERO STACK
     fn rts_imp(&mut self, mem: &mut Memory, _: fn(&mut Self)) {
         match self.ts {
             1 => { mem.read(self.pc as usize);    self.inc_pc(); },   // discard read
