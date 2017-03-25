@@ -50,6 +50,7 @@ pub struct P65 {
     v2: u8,
     ah: u8,
     al: u8,
+    nmi: u64,
 }
 
 type AddrModeF<M: Memory> = fn(&mut P65, &mut M,  fn(&mut P65));
@@ -65,19 +66,22 @@ impl fmt::Debug for P65 {
 impl P65 {
     pub fn new() -> P65 {
         P65 { 
-            a:0xaa, 
-            x:0, 
-            y:0, 
-            p: P65Flags {n: false, v: false, bit5: true, b: true, d: false, i: true, z: true, c: false,},
-            s: (0xfd), 
-            pc: (0), 
+            a:  0xaa, 
+            x:  0, 
+            y:  0, 
+            p:  P65Flags {n: false, v: false, bit5: true, b: true, d: false, i: true, z: true, c: false,},
+            s:  0xfd, 
+            pc: 0, 
             cycle: 0, 
             ts: 0, 
             op: 0, 
-            v1: (0), 
-            v2: (0), 
-            ah: (0), 
-            al: (0),
+            v1: 0, 
+            v2: 0, 
+            ah: 0, 
+            al: 0,
+            nmi_cycle: 0,
+            nmi: false,
+            nmi_triggered: false,     /* TBC FIXME */
             }
     }
 
@@ -106,8 +110,11 @@ impl P65 {
     fn ah_al(&self) -> u16 { (self.ah as u16) << 8 | (self.al as u16) }
     fn inc_pc(&mut self) { self.pc = self.pc.wrapping_add(1); }
     #[allow(dead_code)]
-    fn set_pc(&mut self, pch: u8, pcl: u8) { self.pc = ((pch as u16) << 8) | (pcl as u16); }
-
+    fn set_pc (&mut self, pch: u8, pcl: u8) { self.pc = ((pch as u16) << 8)| (pcl as u16); }
+    #[allow(dead_code)]
+    fn set_pcl(&mut self, pcl: u8)          { self.pc = (self.pc & 0xFF00) | (pcl as u16); }
+    #[allow(dead_code)]
+    fn set_pch(&mut self, pch: u8)          { self.pc = ((pch as u16) << 8)| (self.pc & 0x00FF); }
     fn inc_sp(&mut self) { self.s = self.s.wrapping_add(1); }
     fn dec_sp(&mut self) { self.s = self.s.wrapping_sub(1); }
 
@@ -565,21 +572,40 @@ impl P65 {
     // FIXME
     // please note that B is always set by BRK
     // and is pushed on the stack with P
-    // when serving IRQs (caveats) B will be zero, at least on the stack -- don't know
+    // when serving IRQs (caveat) B will be zero, at least on the stack -- don't know
     // if you can push it and it is 1/0
     // check: http://visual6502.org/wiki/index.php?title=6502_BRK_and_B_bit
+    // please note that BRK is 2 byte long, its opcode 0x00, followed by an unused byte
+    // the reason is to fix old PROMs, where programmed bits were zero. The second byte would
+    // be used by the hot fix to discover where the BRK came from
     fn brk_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
             1 => { mem.read(self.pc as usize); self.inc_pc(); self.p.b = true; },                // discard read. pc has been incremented earlier
             2 => { mem.write((self.s as usize) + 0x100, (self.pc >> 8) as u8);   self.dec_sp();  },
             3 => { mem.write((self.s as usize) + 0x100, (self.pc & 0xFF) as u8); self.dec_sp();  },    
-            4 => { mem.write((self.s as usize) + 0x100, (self.pack_p()) as u8);  self.dec_sp(); },
+            4 => { mem.write((self.s as usize) + 0x100, (self.pack_p()) as u8);  self.dec_sp();  },
             5 => { self.pc =  mem.read(0xFFFE) as u16;  },     // PCL
             6 => { self.pc = (self.pc & 0xFF) | ((mem.read(0xFFFF) as u16) << 8); }, // PCH
-            7 => { self.fetch_op(mem); self.p.i = true; },        // remember to set up i
+            7 => { self.fetch_op(mem); self.p.i = true; },        // remember to set I. Is too late here? 
             _ => {},
         }
     }
+    // An interrupt is more or less like a BRK.
+    // Do not clear the interrupt (CLI) before the issuing peripheral interrupt flag is cleared, or will fire twice! 
+    // That's not of relevance here.
+    fn irq<M: Memory>(&mut self, mem: &mut M) {
+
+    }
+    // firing an NMI will get it serviced, then ignored until took down and then up (logically).
+    // this is called being "edge sensitive". Must stay up / low for at least two cycles to be sensed.
+    fn nmi_set<M: Memory>(&mut self, mem: &mut M) {
+        if pr.nmi == 0 { pr.nmi = pr.cycle };
+    }
+    // please note that once triggered, within 2 cycles, NMI will happen anyway
+    fn nmi_clear<M: Memory>(&mut self, mem: &mut M) {
+        if pr.cycle - pr.nmi > 2 { pr.nmi = 0 };
+    }
+
     fn rti_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
             1 => { mem.read(self.pc as usize);    self.inc_pc(); },   // discard read
@@ -617,8 +643,8 @@ impl P65 {
     }
     fn rts_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
-            1 => { mem.read(self.pc as usize);    self.inc_pc(); },   // discard read
-            2 => { mem.read((self.s as usize) + 0x100); self.inc_sp(); },     // discard read too
+            1 => { mem.read(self.pc as usize);                            self.inc_pc(); },   // discard read
+            2 => { mem.read((self.s as usize) + 0x100);                   self.inc_sp(); },     // discard read too
             3 => { self.pc =  mem.read((self.s as usize) + 0x100) as u16; self.inc_sp(); }, 
             4 => { self.pc = (self.pc & 0xFF) |  ((mem.read((self.s as usize) + 0x100) as u16) << 8 );  }, 
             5 => { mem.read(self.pc as usize);    self.inc_pc(); },   // discard read, inc pc
@@ -626,7 +652,6 @@ impl P65 {
             _ => {},
         }
     }
-
     fn a5_bxx<M: Memory>(&mut self, mem: &mut M, opfun: OpcodeF) {
         match self.ts {
             1 => { self.v1 =  mem.read(self.pc as usize); self.inc_pc();  opfun(self);   },    // skip to 4 if branch not taken. relative jump is calculated from nextop address
@@ -688,10 +713,8 @@ impl P65 {
             0xf0 => { P65::a5_bxx  },0xf1 => { P65::a2_iy} ,0xf2 => { P65::ad_unk } ,0xf3 => { P65::ad_unk },0xf4 => { P65::ad_unk },0xf5 => { P65::a2_zpx },0xf6 => { P65::a4_zpx },0xf7 => { P65::ad_unk },0xf8 => { P65::a1_imp },0xf9 => { P65::a2_ay  },0xfa => { P65::ad_unk },0xfb => { P65::ad_unk },0xfc => { P65::ad_unk } ,0xfd => { P65::a2_ax } ,0xfe => { P65::a4_ax  }, 0xff => { P65::ad_unk },
             _ => { P65::ad_unk }
         }
-
     }    
 
-    // we fake this.
     pub fn reset<M: Memory>(&mut self, mem: &mut M) {
         self.s =   0xFD;
         self.op =  0x00;
@@ -703,14 +726,50 @@ impl P65 {
         self.cycle = 8;
     }
 
+    fn check_interrupts(&mut self) {
+        if self.nmi != 0 && self.cycle - self.nmi == 2 {  // nmi will be triggered only once, then needs to be reset
+            self.nmi_triggered = true;
+        }
+        if self.irq != 0 && self.cycle - self.irq >= 2 {  // Triggered. Deplete current instruction and overpower fetch
+            self.irq_triggered = true;
+        }
+    }
+
+    /* run will run count cycles, eventually stopping in the midst of an instruction */
     pub fn run<M: Memory>(&mut self, mem: &mut M, count: u64) -> u64 {
-        for _ in 0..count {
-            let opfun = P65::decode_op(self.op);
-            let opaddr = P65::decode_addr_mode::<M>(self.op);
+        self.check_interrupts();
+        for _ in 0 .. count {
+            let opaddr: AddrModeF<M> = P65::decode_addr_mode::<M>(self.op);
+            let opfun: OpcodeF = P65::decode_op(self.op);
             opaddr(self, mem, opfun);
+            if (self.nmi_triggered || self.irq_triggered) && self.ts == 0 {  // current instruction has been depleted. we can service irq/nmi
+                self.op = 0x00;       // brk_imp, see implementation
+                self.dec_pc();        
+            }
             self.tick();
         }
-        0
+        self.cycle
+    }
+
+
+    /*
+     * step will execute exactly count instructions, including the current one, if not yet terminated.
+     * Due to the way 6502 overlaps execute of the previous instruction (except for memory operations) with
+     * fetch of the next one, next op may have been already loaded by the time a step terminates.
+     * You will never see the processor in state T0, only in T1, after fetching opcode and before addressing and execute.
+     * If the controlling program has to start executing at an arbitrary location it should
+     * a) set the PC and call fetch_op, or
+     * b) call jump
+     * c) set 0xFFFE/0xFFFF and reset
+     *
+     * Note that by repetitive calling to run, step may be substantially slower
+     */
+    pub fn step<M: Memory>(&mut self, mem: &mut M, count: u64) {
+        let mut count = count;
+        while count > 0 {
+            self.run(mem,1);
+            if self.ts == 1 { count -= 1; }
+        }
     }
 }
 

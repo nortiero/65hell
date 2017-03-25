@@ -36,6 +36,7 @@ fn main() {
   // test actually run in 1.46s on my machine when --release'd
     let mut f = std::fs::File::open("tests/fxa.bin").unwrap();
     let rs = f.read_exact(&mut mem.0[0x000A ..]).unwrap();
+    for _ in 0..4 {
     mem.write(0xFFFC, 0x00);
     mem.write(0xFFFD, 0x04);
     pr.reset(&mut mem);
@@ -60,8 +61,9 @@ fn main() {
         }
         pr.run(&mut mem, 10_000);
         stdout.flush().unwrap();
-        if mem.read(0x200) == 240 { println!("fine al ciclo: {}", pr.cycle); break; }
+        if mem.read(0x200) == 240 { println!("fine al ciclo: {}\r", pr.cycle); break; }
     }
+}
     
 /*
         if pr.cycle >= 100_000_000 {
