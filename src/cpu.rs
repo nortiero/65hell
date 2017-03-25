@@ -18,6 +18,31 @@ pub struct P65Flags {
             c: bool, 
 }       
 
+impl P65Flags {
+    fn pack(&self) -> u8 {
+        (if self.n { 0x80 } else { 0x00 })  |
+         if self.v { 0x40 } else { 0x00 }   |
+         0x20                               |
+         if self.b { 0x10 } else { 0x00 }   |
+         if self.d { 0x08 } else { 0x00 }   |
+         if self.i { 0x04 } else { 0x00 }   |
+         if self.z { 0x02 } else { 0x00 }   |
+         if self.c { 0x01 } else { 0x00 } 
+    }
+
+    fn unpack(&mut self, flags: u8) {
+        self.n = flags & 0x80 != 0; 
+        self.v = flags & 0x40 != 0; 
+        self.bit5 = true; 
+        self.b = flags & 0x10 != 0;    // FIXME. B is full of sad
+        self.d = flags & 0x08 != 0; 
+        self.i = flags & 0x04 != 0; 
+        self.z = flags & 0x02 != 0; 
+        self.c = flags & 0x01 != 0; 
+    }
+}
+
+
 impl fmt::Debug for P65Flags {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let val = (if self.n { 0x80 } else { 0x00 }) |
@@ -50,7 +75,9 @@ pub struct P65 {
     v2: u8,
     ah: u8,
     al: u8,
-    nmi: u64,
+    nmi: bool, nmi_cycle: u64, nmi_triggered: bool,
+    irq: bool, irq_cycle: u64, irq_triggered: bool,
+    reset_triggered: bool,
 }
 
 type AddrModeF<M: Memory> = fn(&mut P65, &mut M,  fn(&mut P65));
@@ -59,7 +86,7 @@ type OpcodeF = fn(&mut P65);
 impl fmt::Debug for P65 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "T{:01x} pc:{:04x} a:{:02x} x:{:02x} y:{:02x} p:{:02x} s:{:02x} op:{:02x} v1:{:02x} v2:{:02x} ah/al: {:04x} Cy:{:06}",
-             self.ts, self.pc, self.a,self.x,self.y,self.pack_p(), self.s, self.op, self.v1, self.v2, self.ah_al(), self.cycle % 1000000 )
+             self.ts, self.pc, self.a,self.x,self.y,self.p.pack(), self.s, self.op, self.v1, self.v2, self.ah_al(), self.cycle % 1000000 )
     }
 }
 
@@ -79,10 +106,10 @@ impl P65 {
             v2: 0, 
             ah: 0, 
             al: 0,
-            nmi_cycle: 0,
-            nmi: false,
-            nmi_triggered: false,     /* TBC FIXME */
-            }
+            nmi_cycle: 0, nmi: false, nmi_triggered: false,
+            irq_cycle: 0, irq: false, irq_triggered: false,
+            reset_triggered: false,
+        }
     }
 
     fn cycle_inc(&mut self) -> u64 {
@@ -118,27 +145,6 @@ impl P65 {
     fn inc_sp(&mut self) { self.s = self.s.wrapping_add(1); }
     fn dec_sp(&mut self) { self.s = self.s.wrapping_sub(1); }
 
-    fn pack_p(&self) -> u8 {
-        (if self.p.n { 0x80 } else { 0x00 })  |
-         if self.p.v { 0x40 } else { 0x00 }   |
-         0x20                                 |
-         if self.p.b { 0x10 } else { 0x00 }   |
-         if self.p.d { 0x08 } else { 0x00 }   |
-         if self.p.i { 0x04 } else { 0x00 }   |
-         if self.p.z { 0x02 } else { 0x00 }   |
-         if self.p.c { 0x01 } else { 0x00 } 
-    }
-
-    fn unpack_set_p(&mut self, flags: u8) {
-        self.p.n = flags & 0x80 != 0; 
-        self.p.v = flags & 0x40 != 0; 
-        self.p.bit5 = true; 
-        self.p.b = flags & 0x10 != 0;    // FIXME. B is full of sad
-        self.p.d = flags & 0x08 != 0; 
-        self.p.i = flags & 0x04 != 0; 
-        self.p.z = flags & 0x02 != 0; 
-        self.p.c = flags & 0x01 != 0; 
-    }
 
     // adjust negative and zero flags, a common operation.
     // i am using a parameter, v, instead of relying on v1 etc because of the ease of making mistakes here. 
@@ -253,7 +259,7 @@ impl P65 {
     fn op_stx(&mut self) { self.v1 = self.x; }
     fn op_sty(&mut self) { self.v1 = self.y; }
     fn op_pha(&mut self) { self.v1 = self.a; }
-    fn op_php(&mut self) { self.v1 = self.pack_p(); }
+    fn op_php(&mut self) { self.v1 = self.p.pack(); }
     fn op_sec(&mut self) { self.p.c = true;  }     
     fn op_clc(&mut self) { self.p.c = false; }     
     fn op_sei(&mut self) { self.p.i = true;  }     
@@ -275,7 +281,7 @@ impl P65 {
     fn op_plp(&mut self) { 
         let stupid_borrow = self.v1; 
         let tmpb = self.p.b;    // B is unaffected by plp
-        self.unpack_set_p(stupid_borrow); 
+        self.p.unpack(stupid_borrow); 
         self.p.b = tmpb;
     }
     fn op_bcs(&mut self) { if !self.p.c { self.ts = 3 }; }       // ts = 3 means to skip to T3 (+ 1), branch not taken
@@ -568,42 +574,92 @@ impl P65 {
         }
     }
 
-    // TODO: NMI & RESET (FFFA e FFFC)
-    // FIXME
-    // please note that B is always set by BRK
-    // and is pushed on the stack with P
-    // when serving IRQs (caveat) B will be zero, at least on the stack -- don't know
-    // if you can push it and it is 1/0
     // check: http://visual6502.org/wiki/index.php?title=6502_BRK_and_B_bit
     // please note that BRK is 2 byte long, its opcode 0x00, followed by an unused byte
     // the reason is to fix old PROMs, where programmed bits were zero. The second byte would
     // be used by the hot fix to discover where the BRK came from
+    // about B:
+    // - is not a real flag
+    // - real nmos 6502 set it always in T5, even for IRQs
+    // - IRQs and NMIs enter at T2, so they skip pc increment and b = 1. Nice! 
+    // - if a NMI kicks in during BRK it will store B as 1 on the stack.. that's original cpu behavior
+    // - if you CLI during a NMI, you can serve other NMIs before RTI (and other IRQs too!)
+    // CHECK/FIXME . we drop the triggers at T6. A fast bouncing NMI or IRQ could be retriggered early.. What a real CPU would do?
     fn brk_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
-            1 => { mem.read(self.pc as usize); self.inc_pc(); self.p.b = true; },                // discard read. pc has been incremented earlier
-            2 => { mem.write((self.s as usize) + 0x100, (self.pc >> 8) as u8);   self.dec_sp();  },
-            3 => { mem.write((self.s as usize) + 0x100, (self.pc & 0xFF) as u8); self.dec_sp();  },    
-            4 => { mem.write((self.s as usize) + 0x100, (self.pack_p()) as u8);  self.dec_sp();  },
-            5 => { self.pc =  mem.read(0xFFFE) as u16;  },     // PCL
-            6 => { self.pc = (self.pc & 0xFF) | ((mem.read(0xFFFF) as u16) << 8); }, // PCH
+            1 => { mem.read(self.pc as usize); self.inc_pc(); self.p.b = true; },  // discard read. note that ONLY the real BRK will be in T1
+            2 => {
+                if self.reset_triggered {   // this hack is from the cpu
+                    mem.read((self.s as usize) + 0x100); self.dec_sp();
+                } else { 
+                    mem.write((self.s as usize) + 0x100, (self.pc >> 8) as u8);   self.dec_sp();
+                }},
+            3 => { 
+                if self.reset_triggered {
+                    mem.read((self.s as usize) + 0x100); self.dec_sp();
+                } else {
+                    mem.write((self.s as usize) + 0x100, (self.pc & 0xFF) as u8); self.dec_sp();    
+                }},
+            4 => { 
+                if self.reset_triggered {
+                    mem.read((self.s as usize) + 0x100); self.dec_sp();
+                } else {
+                    mem.write((self.s as usize) + 0x100, (self.p.pack()) as u8);  self.dec_sp();  
+                }},
+            5 => { 
+                // the actual vector is chosen late in the process, e.g. http://forum.6502.org/viewtopic.php?t=1797
+                // this will also "steal" the BRK, if we happen to be executing it during irq/nmi triggering
+                // we use a little hack to ensure that a late NMI won't switch vectors at T6. the processor
+                // uses logic to ensure the same behavior
+                if self.reset_triggered {
+                    self.set_pcl(mem.read(0xFFFC));
+                    self.ah = 0xFF; self.al = 0xFD;
+                    self.reset_triggered = false;          // drop trigger
+                } else if self.nmi_triggered {
+                    self.set_pcl(mem.read(0xFFFA));
+                    self.ah = 0xFF; self.al = 0xFB;
+                    self.nmi_triggered = false;            
+                } else {
+                    self.set_pcl(mem.read(0xFFFE));
+                    self.ah = 0xFF; self.al = 0xFF;
+                    if self.irq_triggered { self.irq_triggered = false; };
+                }
+                self.p.b = true;
+            },
+            6 => { let tmp = self.ah_al() as usize; self.set_pch(mem.read(tmp)); },
             7 => { self.fetch_op(mem); self.p.i = true; },        // remember to set I. Is too late here? 
             _ => {},
         }
     }
     // An interrupt is more or less like a BRK.
     // Do not clear the interrupt (CLI) before the issuing peripheral interrupt flag is cleared, or will fire twice! 
-    // That's not of relevance here.
-    fn irq<M: Memory>(&mut self, mem: &mut M) {
-
+    fn irq_set<M: Memory>(&mut self, mem: &mut M) {
+        if !self.irq && self.cycle - self.irq_cycle >= 2 {
+            self.irq_cycle = self.cycle;
+            self.irq = true;
+        }
     }
+    fn irq_clear<M: Memory>(&mut self, mem: &mut M) {
+        if  self.irq && self.cycle - self.irq_cycle >= 2 {
+            self.irq_cycle = self.cycle;
+            self.irq = false;
+        }
+    }
+
     // firing an NMI will get it serviced, then ignored until took down and then up (logically).
     // this is called being "edge sensitive". Must stay up / low for at least two cycles to be sensed.
     fn nmi_set<M: Memory>(&mut self, mem: &mut M) {
-        if pr.nmi == 0 { pr.nmi = pr.cycle };
+        if !self.nmi && self.cycle - self.nmi_cycle >= 2 {
+            self.nmi_cycle = self.cycle;
+            self.nmi = true;
+        }
     }
     // please note that once triggered, within 2 cycles, NMI will happen anyway
     fn nmi_clear<M: Memory>(&mut self, mem: &mut M) {
-        if pr.cycle - pr.nmi > 2 { pr.nmi = 0 };
+        if  self.nmi && self.cycle - self.nmi_cycle >= 2 {
+            self.nmi_cycle = self.cycle;
+            self.nmi = false;
+        }
     }
 
     fn rti_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
@@ -612,7 +668,7 @@ impl P65 {
             2 => { mem.read((self.s as usize) + 0x100); self.inc_sp(); },     // discard read too
             3 => {  let pedante=mem.read(self.s as usize + 0x100);
                     let tmpb = self.p.b; 
-                    self.unpack_set_p(pedante); self.inc_sp();
+                    self.p.unpack(pedante); self.inc_sp();
                     self.p.b = tmpb;       // b is unaffected by rti & plp
                         },
             4 => { self.pc = mem.read((self.s as usize) + 0x100) as u16; self.inc_sp(); }, 
@@ -725,12 +781,12 @@ impl P65 {
         self.tick();
         self.cycle = 8;
     }
-
+    // QUESTION: CAN A NMI interrupt another NMI ?
     fn check_interrupts(&mut self) {
-        if self.nmi != 0 && self.cycle - self.nmi == 2 {  // nmi will be triggered only once, then needs to be reset
+        if self.nmi && self.cycle - self.nmi_cycle == 2 {  // == 2:  nmi will be triggered only once, then needs to be reset
             self.nmi_triggered = true;
         }
-        if self.irq != 0 && self.cycle - self.irq >= 2 {  // Triggered. Deplete current instruction and overpower fetch
+        if !self.p.i && self.irq && self.cycle - self.irq_cycle >= 2 {   // irqs are always retriggered if not blocked by SEI
             self.irq_triggered = true;
         }
     }
@@ -742,9 +798,10 @@ impl P65 {
             let opaddr: AddrModeF<M> = P65::decode_addr_mode::<M>(self.op);
             let opfun: OpcodeF = P65::decode_op(self.op);
             opaddr(self, mem, opfun);
-            if (self.nmi_triggered || self.irq_triggered) && self.ts == 0 {  // current instruction has been depleted. we can service irq/nmi
+            if (self.nmi_triggered) && self.ts == 0 {  // current instruction has been depleted. we can service irq/nmi
                 self.op = 0x00;       // brk_imp, see implementation
-                self.dec_pc();        
+                self.ts = 1;          // we skip reading brk operand
+                self.pc = self.pc.wrapping_sub(1);
             }
             self.tick();
         }
