@@ -5,7 +5,7 @@
 
 
 #[allow(dead_code)]
-fn op_name(op: u8) -> &'static str {
+pub fn op_name(op: u8) -> &'static str {
     const OPTABLE: [&'static str; 256] = [
 // MSD LSD-> 0            1            2            3            4            5            6            7            8            9            a            b            c            d            e            f
          "brk", "ora", "unk", "unk", "unk", "ora", "asl", "unk", "php", "ora", "asl", "unk", "unk", "ora", "asl", "unk",
@@ -33,7 +33,7 @@ fn op_name(op: u8) -> &'static str {
 
 // quick'n'dirty addressing mode disassembler, very useful to debug the simulator itself
 #[allow(dead_code)]
-fn addr_string(op: u8, v1: u16) -> String {
+pub fn addr_name(op: u8, v1: u16) -> String {
     match op & 0x0F {
     0x00 =>  {   
         if op & 0x10 != 0 {

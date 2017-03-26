@@ -10,6 +10,7 @@ mod memory;
 use memory::MemoryArray;
 use cpu::Memory;
 use cpu::P65;
+mod disasm;
 
 
 // Simple test program for my 6502 simulator. Will load EHBASIC at 0xC000 and run it. 
@@ -20,8 +21,6 @@ fn main() {
     let mut stdout = new_stdout.lock().into_raw_mode().unwrap();
     let mut stdin = async_stdin().bytes();
 
-    let mut pr = P65::new();
-    let mut mem = MemoryArray::new(65536).unwrap();        // the full awesome power of 64KB at the tip of your fingers
 
 /* basic
 
@@ -34,9 +33,67 @@ fn main() {
 
   //tests
   // test actually run in 1.46s on my machine when --release'd
-    let mut f = std::fs::File::open("tests/fxa.bin").unwrap();
-    let rs = f.read_exact(&mut mem.0[0x000A ..]).unwrap();
-    for _ in 0..4 {
+
+    let mut pr = P65::new();
+
+// we need something different for memory
+
+
+    struct MemoryArrayMess{ 
+        pub m: Vec<u8>,
+        pub fire_irq: bool,
+        pub fire_nmi: bool,
+    }
+
+    impl MemoryArrayMess{
+        pub fn new(size: usize) -> Result<MemoryArrayMess, &'static str> {
+            if size > 65536 {
+                Err("Too much!")
+            } else {
+                Ok(MemoryArrayMess { m: vec![0u8; size], fire_irq: false, fire_nmi: false })
+            }
+        }
+    }
+
+    impl Memory for MemoryArrayMess {
+        fn read(&mut self, a: usize) -> u8 {
+            match a {
+                0xF004 => {
+                    let tmp = self.m[a];         // temp hack for ehbasic i/o
+                    self.m[a] = 0x00;
+                    tmp
+                },
+                0xBFFC => {
+                    println!("READ BFFC!");
+                    self.m[a]
+                }
+                _ => self.m[a],
+            }
+        }
+
+        fn write(&mut self, a: usize, v: u8) { 
+            match a {
+                0xF001 => { print!("{}",v as char); },
+                0xBFFC => {
+                    println!("Write BFFC <- {:x}\r", v);
+                    if v & 0x01 != 0 {                     // bit 0 è /IRQ
+                        self.fire_irq = false;
+                    } else {
+                        self.fire_irq = true;
+                    }
+                }
+                _ => { self.m[a] = v; },
+            }
+        }
+    }
+
+
+    let mut mem = MemoryArrayMess::new(65536).unwrap();        // the full awesome power of 64KB at the tip of your fingers
+    let mut f = std::fs::File::open("tests/6502_interrupt_test.bin").unwrap();
+    let _ = f.read_exact(&mut mem.m[0x000A ..]).unwrap();
+
+
+
     mem.write(0xFFFC, 0x00);
     mem.write(0xFFFD, 0x04);
     pr.reset(&mut mem);
@@ -59,11 +116,22 @@ fn main() {
             Some(Err(_)) => { write!(stdout, "Error char\r\n").unwrap(); },
             None => {},
         }
-        pr.run(&mut mem, 10_000);
-        stdout.flush().unwrap();
-        if mem.read(0x200) == 240 { println!("fine al ciclo: {}\r", pr.cycle); break; }
+        pr.run(&mut mem, 1);
+        if mem.fire_irq { println!("Fire IRQ!\r"); pr.irq_set(); } else { pr.irq_clear(); mem.fire_irq = false; }
+        if mem.fire_nmi { println!("Fire NMI!\r"); pr.nmi_set(); } else { pr.nmi_clear(); mem.fire_nmi = false; }
+        if pr.cycle % 10_000 == 0 {     // flush sometimes, gross!
+            stdout.flush().unwrap();
+        }
     }
-}
+
+
+// we want to: 
+// intercept some memory reads/writes  (for emulating mmapped devices/peripherals)
+// allow the cpu and other peripherals to read / write some signals
+
+
+
+
     
 /*
         if pr.cycle >= 100_000_000 {
