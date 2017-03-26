@@ -583,14 +583,14 @@ impl P65 {
     // - is not a real flag
     // - real nmos 6502 set it always in T5, even for IRQs
     // - IRQs and NMIs enter at T2, so they skip pc increment and b = 1. Nice! 
-    // - if a NMI kicks in during BRK between T4 and T5 it will store B as 1 on the stack.. that's original cpu behavior (BUG). I am unsure of the extent of the bug. Where is B set? CHECK with virtual6502
+    // - if a NMI kicks in during BRK between T0 and T3 it will store B as 1 on the stack.. that's original cpu behavior (BUG). I am unsure of the extent of the bug. Where is B set? CHECK with virtual6502
     // - if you CLI during a NMI, you can serve other NMIs before RTI (and other IRQs too!)
     // CHECK/FIXME . we drop the triggers at T6. A fast bouncing NMI or IRQ could be retriggered early.. What a real CPU would do?
     fn brk_imp<M: Memory>(&mut self, mem: &mut M, _: fn(&mut Self)) {
         match self.ts {
             1 => { mem.read(self.pc as usize); self.inc_pc(); self.p.b = true; },  // discard read. note that ONLY the real BRK will be in T1, IRQ/NMI START FROM T2
-            2 => {       // ENTRY POINT for IRQs & NMIs
-                if self.nmi_triggered | self.irq_triggered { self.p.b = false; }   // we force down B 
+            2 => {       // ENTRY POINT for IRQs & NMIs. b MUST be false now , except for note bug
+                
                 if self.reset_triggered {   // this hack is from the cpu
                     mem.read((self.s as usize) + 0x100); self.dec_sp();
                 } else { 
@@ -602,7 +602,7 @@ impl P65 {
                 } else {
                     mem.write((self.s as usize) + 0x100, (self.pc & 0xFF) as u8); self.dec_sp();    
                 }},
-            4 => { 
+            4 => {
                 if self.reset_triggered {
                     mem.read((self.s as usize) + 0x100); self.dec_sp();
                 } else {
@@ -613,7 +613,8 @@ impl P65 {
                 // this will also "steal" the BRK, if we happen to be executing it during irq/nmi triggering
                 // we use a little hack to ensure that a late NMI won't switch vectors at T6. the processor
                 // uses logic to ensure the same behavior
-                self.p.i = true;                           // now I must be set, to avoid retriggering
+                self.p.i = true;                           // now I must be set, to avoid retriggering. cpu does the same
+                self.p.b = true;
                 if self.reset_triggered {
                     self.set_pcl(mem.read(0xFFFC));
                     self.ah = 0xFF; self.al = 0xFD;
@@ -627,7 +628,6 @@ impl P65 {
                     self.ah = 0xFF; self.al = 0xFF;
                     if self.irq_triggered { self.irq_triggered = false; };
                 }
-                self.p.b = true;
             },
             6 => { let tmp = self.ah_al() as usize; self.set_pch(mem.read(tmp)); },
             7 => { self.fetch_op(mem); },        // remember to set I. Is too late here? -> Yes 
@@ -790,7 +790,7 @@ impl P65 {
     // QUESTION: CAN A NMI interrupt another NMI ?
     fn check_interrupts(&mut self) {
         if self.nmi && self.cycle - self.nmi_cycle == 2 {  // == 2:  nmi will be triggered only once, then needs to be reset
-            self.nmi_triggered = true;
+            self.nmi_triggered = true;  // FIXME. checking after 2 cycles only is a bit of a hack to avoid bouncing. we can do better
         }
         if !self.p.i && self.irq && self.cycle - self.irq_cycle >= 2 {   // irqs are always retriggered if not blocked by SEI
             println!("IRQ Triggered!");
@@ -800,7 +800,7 @@ impl P65 {
 
     /* run will run count cycles, eventually stopping in the midst of an instruction */
     pub fn run<M: Memory>(&mut self, mem: &mut M, count: u64) -> u64 {
-        self.check_interrupts();
+        self.check_interrupts(); // FIXME: interrupts should be polled at the end of T1 or early T2. see: https://wiki.nesdev.com/w/index.php/CPU_interrupts
         for _ in 0 .. count {
             if (self.ts == 1) 
             {
@@ -818,6 +818,7 @@ impl P65 {
                 self.op = 0x00;       // brk_imp, see implementation
                 self.ts = 1;          // we skip reading brk operand
                 self.pc = self.pc.wrapping_sub(1);
+                self.p.b = false;     // we clear B here, because of entering BRK at T2 (and to simulate BRK/IRQ & IRQ/NMI B shadowing)
             }
 
             self.tick();

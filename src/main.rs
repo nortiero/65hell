@@ -64,7 +64,6 @@ fn main() {
                     tmp
                 },
                 0xBFFC => {
-                    println!("READ BFFC!");
                     self.m[a]
                 }
                 _ => self.m[a],
@@ -75,7 +74,6 @@ fn main() {
             match a {
                 0xF001 => { print!("{}",v as char); },
                 0xBFFC => {
-                    println!("Write BFFC <- {:x}\r", v);
                     if v & 0x01 != 0 {                     // bit 0 è /IRQ
                         self.fire_irq = false;
                     } else {
@@ -123,29 +121,4 @@ fn main() {
             stdout.flush().unwrap();
         }
     }
-
-
-// we want to: 
-// intercept some memory reads/writes  (for emulating mmapped devices/peripherals)
-// allow the cpu and other peripherals to read / write some signals
-
-
-
-
-    
-/*
-        if pr.cycle >= 100_000_000 {
-            if pr.ts == 1 {
-                print!("\r\n");
-                print!("{:3}",P65::op_name(pr.op).to_uppercase());
-                print!(" {:7}", P65::addr_string(pr.op, (mem.read(pr.pc as usize) as u16) | ((mem.read(pr.pc.wrapping_add(1) as usize) as u16) << 8)).to_uppercase());
-            } else {
-                print!("           ");
-            }
-            print!(" {:?}", pr);  
-            print!("\r\n");
-            break;
-        }
-    }
-*/        
 }
