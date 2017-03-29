@@ -21,21 +21,33 @@ Instructions:
 As you probably know debug mode is a painful ~15 times slower vs. release, a common Rust weakness. 
 "Govern yourself accordingly" -- and have fun!
 
+Things to do:
+
+`cargo run --  -k f004 -t f001 C000:tests/ehbasic.bin -j c000`
+
+Setup minimal i/o and launch enhanced basic. 
+Answer "C" to Warm/Cold question, or the
+simulator will panic, because basic will try to execute things into uninitialized memory.
+There is no "delete" and "backspace" does what says, but does not clear text under cursor.
+Play with it!
 
 
 
 Todo:
 
-- test RESET
-- sample timed execution in main
+- RESET signal must be tested
+- sample timed execution in main -- LIMIT PERFORMANCE
 - check that irqs etc match exactly this: https://wiki.nesdev.com/w/index.php/CPU_interrupts
+- interrupts are sampled a bit too much and a bit too early, can be more precise
 - unimplemented opcodes, and their side effects;
 - NMOS 6502 quirky flags in decimal mode  (documented flags are OK);
 - support for 6502 variants: 6510, at a minimum;
-- maybe some speedup, but it's no slouch even now;
 - implement a new memory subsystem, to support pages and layered mapping, also r/o;
 - ** crateize (or cratify?) it (for Rust);
 - faster sub-exact mode: correct cycle count but simplified memory accesses;
 - stun mode for 6510 etc, where the CPU skips the current cycle
 - SYNC/RDY for the 6502. Sync is an OUTPUT signal, high at T0. RDY is an INPUT signal that halts the processor
+- a full program monitor outside memory. That should not be hard.
 
+Evaluating performance:
+a free run of 6502_functional_test runs in 1.46s on my machine. Please use cargo build --release !

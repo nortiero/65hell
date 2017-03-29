@@ -1,17 +1,15 @@
 extern crate termion;
-extern crate clap;
-use std::ascii::AsciiExt;
-use termion::raw::IntoRawMode;
-use termion::async_stdin;
-use std::io::{Read, stdout, Write};
 
 mod cpu;
-mod memory;
-use memory::MemoryArray;
+mod disasm;
+
+use std::ascii::AsciiExt;
+use std::fmt::Write as whatever ;
+use std::io::{Read, stdout,Write};
+use termion::raw::IntoRawMode;
+use termion::async_stdin;
 use cpu::Memory;
 use cpu::P65;
-mod disasm;
-use clap::{App, Arg};
 
 // Simple test program for my 6502 simulator.
 // The program accepts a few arguments, check with -h or --help
@@ -58,7 +56,7 @@ fn main() {
             }
             p @ "-k" | p @ "-j" | p @ "-t" | p @ "-i" => {
                 let arg = ai.next();
-                if (arg.is_none()) {
+                if arg.is_none() {
                     println!("{} needs an argument.", p);
                     return;
                 }
@@ -74,12 +72,12 @@ fn main() {
                 if let Ok(v) = u16::from_str_radix(&arg.unwrap(), 16) {
                     *target = Some(v);
                 } else {
-                    println!("Usage: {} {}", exe, explain);
+                    println!("Usage: {} {}", exe, EXPLAIN);
                     return;
                 }
             }
             _ => {
-                println!("Usage: {} {}", exe, explain);
+                println!("Usage: {} {}", exe, EXPLAIN);
             }
         }
     }
@@ -88,12 +86,14 @@ fn main() {
         return;
     }
 
-    const explain: &'static str = "[options] [-a] [address:]file [[-a] [addr:]file ..]\r
+    const EXPLAIN: &'static str = "[options] [-a] [address:]file [[-a] [addr:]file ..]\r
 \r
 Load one or more blobs at specified hexadecimal addresses.\r
 Ascii dumps usually include load address. To load an ascii dump use the prefix '-a' \r
 Binary blobs are loaded at the top of memory, unless otherwise specified.\r
 Memory size is 64KB\r
+Press Ctrl+q to quit, Ctrl+e to dump processor status.
+
 Options:\r
 \t-h: help\r
 \t-d: dump trace to stderr\r
@@ -107,69 +107,67 @@ Options:\r
     let mut stdout = new_stdout.lock().into_raw_mode().unwrap();
     let mut stdin = async_stdin().bytes();
 
-
-    // test actually run in 1.46s on my machine when --release'd
-
+    let mut status_print = false;
+    let mut last_flush = 0u64;
     let mut pr = P65::new();
-
-
-    let mut f = std::fs::File::open("tests/fxa.bin").unwrap();
-    let _ = f.read_exact(&mut mem.m[0x000A..]).unwrap();
-
-
-
-    mem.write(0xFFFC, 0x00);
-    mem.write(0xFFFD, 0x04);
     pr.reset(&mut mem);
-    // end tests
+    if jump.is_some() {
+//        println!("jump: {}", jump.unwrap());
+//        pr.jump(&mut mem, jump.unwrap());
+    }
 
-    //    let mut oldpc = 0xFFFFu16;
     loop {
-        let c = stdin.next();
-        match c {
+        match stdin.next() {
             Some(Ok(c)) => {
                 match c {
-                    0x11 => {
-                        break;
+                    0x11 => {   // Ctrl+q
+                            break;
+                    }
+                    0x05 => {  // ctrl+e
+                        status_print = true;
                     }
                     c => {
-                        mem.write(0xF004, c.to_ascii_uppercase());
+                        if mem.keyboard.is_some() {
+                            let btmp = mem.keyboard.unwrap() as usize;
+                            mem.write(btmp as usize, c.to_ascii_uppercase());
+                        }
                     }
                 }
             }
-            Some(Err(_)) => {
-                write!(stdout, "Error char\r\n").unwrap();
-            }
+            Some(Err(_)) => { }
             None => {}
         }
-        pr.run(&mut mem, 10_000);
-        if mem.fire_irq {
-            println!("Fire IRQ!\r");
-            pr.irq_set();
-        } else {
-            pr.irq_clear();
-            mem.fire_irq = false;
+        
+        pr.run(&mut mem, 1);      // 10 000 cycles before we go
+        if mem.irq_generator.is_some() {
+            if mem.fire_irq {
+                pr.irq_set();
+            } else {
+                pr.irq_clear();
+                mem.fire_irq = false;
+            }
+            if mem.fire_nmi {
+                pr.nmi_set();
+            } else {
+                pr.nmi_clear();
+                mem.fire_nmi = false;
+            }
         }
-        if mem.fire_nmi {
-            println!("Fire NMI!\r");
-            pr.nmi_set();
-        } else {
-            pr.nmi_clear();
-            mem.fire_nmi = false;
+        if pr.cycle - last_flush  >=  50_000 {    // flush output every 50K cycles. Gross!
+            stdout.flush().unwrap();              // we must flush to keep terminal operating
+            last_flush = pr.cycle;
         }
-        //        if pr.cycle % 50_000 == 0 {
-        // flush sometimes, gross!
-        //            stdout.flush().unwrap();
-        if mem.read(0x200) == 240 {
-            break;
+        if status_print && pr.ts == 1 {
+            println!("{}\r", status_string(&pr, &mut mem));
+            status_print = false;
         }
-        //            println!("mem 0x200: {}\r", mem.read(0x200));
-        //        }
+        if dump {
+            println!("{}\r", status_string(&pr, &mut mem));
+        }
     }
 }
 
 fn load_binary<M: Memory>(mem: &mut M, name: &str, address: u16) -> std::io::Result<()> {
-    let mut pos = address;
     let f = try!(std::fs::File::open(name));
     for (i, v) in f.bytes().enumerate() {
         mem.write(address.wrapping_add(i as u16) as usize, v?);
@@ -223,7 +221,11 @@ impl Memory for MemoryArrayMess {
     // FIXME. probably a would be a fine u16, instead of usize. check trait
     fn write(&mut self, a: usize, v: u8) {
         if self.printer.is_some() && self.printer.unwrap() == a as u16 {
-            print!("{}", v as char); // cheap term
+            if v == 0x7f {
+                print!("\x08");   // hack for backspace in raw mode
+            } else {
+                print!("{}", v as char); // cheap term. 
+            }
         } else if self.irq_generator.is_some() && self.irq_generator.unwrap() == a as u16 {
             if v & 0x01 != 0 {
                 // bit 0 è /IRQ
@@ -235,4 +237,16 @@ impl Memory for MemoryArrayMess {
             self.m[a] = v;
         }
     }
+}
+// to be called only in T1 , to have meaningful information
+// todo: use a side effect free version of mem.read
+pub fn status_string<M: Memory>(pr: &P65, mem: &mut M) -> String {
+    use disasm;
+    let op = pr.op;
+    let param = (mem.read(pr.pc.wrapping_sub(1) as usize) as u16) 
+                    | ((mem.read(pr.pc as usize) as u16) << 8);
+    let mut status = String::new();
+    write!(&mut status, "{:3} {:7} {:?}", disasm::op_name(op).to_uppercase(), disasm::addr_name(op, param).to_uppercase(), pr)
+        .expect("Error writing processor status");
+    status
 }

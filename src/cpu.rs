@@ -79,6 +79,7 @@ pub struct P65 {
     nmi: bool, nmi_cycle: u64, nmi_triggered: bool,
     irq: bool, irq_cycle: u64, irq_triggered: bool,
     reset_triggered: bool,
+    current_op_pc: u16,
 }
 
 type AddrModeF<M: Memory> = fn(&mut P65, &mut M,  fn(&mut P65));
@@ -110,6 +111,7 @@ impl P65 {
             nmi_cycle: 0, nmi: false, nmi_triggered: false,
             irq_cycle: 0, irq: false, irq_triggered: false,
             reset_triggered: false,
+            current_op_pc: 0,
         }
     }
 
@@ -125,6 +127,7 @@ impl P65 {
 
     fn fetch_op<M: Memory>(&mut self, mem: &mut M) -> u8 {
         self.op = mem.read(self.pc as usize);
+        self.current_op_pc = self.pc;
         self.inc_pc();
         self.ts = 0;    // will be incremented to 1 by tick
         self.op
@@ -784,8 +787,13 @@ impl P65 {
         self.cycle = 8;
     }
 
-    // 
-
+    pub fn jump<M: Memory>(&mut self, mem: &mut M, address: u16) {
+        self.al =  mem.read(address as usize);
+        self.ah =  mem.read(address.wrapping_add(1) as usize);
+        self.pc =  self.ah_al();
+        self.fetch_op(mem);
+        self.tick();
+    }
 
     // QUESTION: CAN A NMI interrupt another NMI ?
     fn check_interrupts(&mut self) {
@@ -793,7 +801,6 @@ impl P65 {
             self.nmi_triggered = true;  // FIXME. checking after 2 cycles only is a bit of a hack to avoid bouncing. we can do better
         }
         if !self.p.i && self.irq && self.cycle - self.irq_cycle >= 2 {   // irqs are always retriggered if not blocked by SEI
-            println!("IRQ Triggered!");
             self.irq_triggered = true;
         }
     }
@@ -802,14 +809,6 @@ impl P65 {
     pub fn run<M: Memory>(&mut self, mem: &mut M, count: u64) -> u64 {
         self.check_interrupts(); // FIXME: interrupts should be polled at the end of T1 or early T2. see: https://wiki.nesdev.com/w/index.php/CPU_interrupts
         for _ in 0 .. count {
-            // if self.ts == 1 
-            {
-                use disasm;
-                let op = self.op;
-                let param = (mem.read(self.pc as usize) as u16) | ((mem.read(self.pc.wrapping_add(1) as usize) as u16) << 8);
-//                print!("{} {} ", disasm::op_name(op).to_uppercase(), disasm::addr_name(op, param).to_uppercase());
-//                println!("0x200: {}, {:?}\r", mem.read(0x200), self);
-            }
 
             let opaddr: AddrModeF<M> = P65::decode_addr_mode::<M>(self.op);
             let opfun: OpcodeF = P65::decode_op(self.op);
@@ -820,11 +819,11 @@ impl P65 {
                 self.pc = self.pc.wrapping_sub(1);
                 self.p.b = false;     // we clear B here, because of entering BRK at T2 (and to simulate BRK/IRQ & IRQ/NMI B shadowing)
             }
-
             self.tick();
         }
         self.cycle
     }
+
 
 
     /*
