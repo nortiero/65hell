@@ -26,8 +26,10 @@ As you probably know debug mode is a painful ~15 times slower vs. release, a com
 
 Todo:
 
+- test RESET
+- sample timed execution in main
+- check that irqs etc match exactly this: https://wiki.nesdev.com/w/index.php/CPU_interrupts
 - unimplemented opcodes, and their side effects;
-- NMI support;
 - NMOS 6502 quirky flags in decimal mode  (documented flags are OK);
 - support for 6502 variants: 6510, at a minimum;
 - maybe some speedup, but it's no slouch even now;

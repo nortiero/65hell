@@ -802,13 +802,13 @@ impl P65 {
     pub fn run<M: Memory>(&mut self, mem: &mut M, count: u64) -> u64 {
         self.check_interrupts(); // FIXME: interrupts should be polled at the end of T1 or early T2. see: https://wiki.nesdev.com/w/index.php/CPU_interrupts
         for _ in 0 .. count {
-            if (self.ts == 1) 
+            // if self.ts == 1 
             {
                 use disasm;
                 let op = self.op;
                 let param = (mem.read(self.pc as usize) as u16) | ((mem.read(self.pc.wrapping_add(1) as usize) as u16) << 8);
-                println!("{} {}\r", disasm::op_name(op).to_uppercase(), disasm::addr_name(op, param).to_uppercase());
-                println!("0x200: {}, {:?}\r", mem.read(0x200), self);
+//                print!("{} {} ", disasm::op_name(op).to_uppercase(), disasm::addr_name(op, param).to_uppercase());
+//                println!("0x200: {}, {:?}\r", mem.read(0x200), self);
             }
 
             let opaddr: AddrModeF<M> = P65::decode_addr_mode::<M>(self.op);
