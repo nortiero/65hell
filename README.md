@@ -30,11 +30,11 @@ simulator will panic, because basic will try to execute things into uninitialize
 There is no "delete" and "backspace" does what says, but does not clear text under cursor.
 Play with it!
 
-Shortlist:
+TODO Shortlist:
 
-- sample timed execution in main -- LIMIT PERFORMANCE
+- sample timed execution in main.rs -- LIMIT PERFORMANCE
 - ** crateize (or cratify?) it (for Rust);
-- peek with ctrl+shift+e
+- peek memory with ctrl+shift+e
 
 Todo:
 
@@ -51,6 +51,7 @@ Todo:
 - a full program monitor outside memory. That should not be hard.
 
 Evaluating performance:
+
 One free run of 6502_functional_test runs in 1.46s on my machine (i5m 1.7 GHz, MB Air 2011), corresponding to 
 a brisky ~75MHz 6502.
 Please compile rust code with --release or performance will slow down to a crawl.

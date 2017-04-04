@@ -45,24 +45,20 @@ fn main() {
     while let Some(s) = ai.next() {
         match s.as_ref() {
             s if !s.starts_with("-") => {
-                let tup: Result<(u16,&str),&str> = s.split(':')
+                let va: Result<(),String>  =    s.split(':')  // it is a Result<(),&str> 
                             .zip(s.split(':').skip(1))
                             .next()
-                            .ok_or("Missing address and file name")
+                            .ok_or("Missing address and file name".to_string())
                             .and_then(|(s1,s2)| u16::from_str_radix(s1,16)
                                                         .map(|a| (a,s2))
-                                                        .or(Err("Missing Address")))
-                            .and_then(|(s1,s2)| if s2.len() > 0 { Ok((s1,s2)) } else { Err("Missing File name") });
-                match tup {
-                    Ok((a,f)) => match load_binary(&mut mem, f, a) {
-                                    Ok(_) => {
-                                        loaded = true;
-                                    },
-                                    Err(e) =>  { println!("Error: {}", e); return },
-                                },
-                    Err(s) => { println!("{}\r",s); return; },
+                                                        .or(Err("Wrong loading address".to_string())))
+                            .and_then(|(s1,s2)| if s2.len() > 0 { Ok((s1,s2)) } else { Err("Missing file name".to_string()) })
+                            .and_then(|(s1,s2)| load_binary(&mut mem, s2, s1).map_err(|e| e.to_string() ));
+                match va {
+                    Ok(_) => { loaded = true; },
+                    Err(ref e) =>  { println!("Error: {}", e); return },
                 }
-            }
+            },
             "-d" => {
                 dump = true;
             }
@@ -203,6 +199,7 @@ fn load_binary<M: Memory>(mem: &mut M, name: &str, address: u16) -> std::io::Res
     }
     Ok(())
 }
+
 
 // we need something better for memory. should manage roms, stratified layouts, etc.
 // TODO: devices should be attached/detached to some bus manager object.
