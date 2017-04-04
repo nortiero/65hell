@@ -19,7 +19,6 @@ Instructions:
 ` cargo run --release `
 
 As you probably know debug mode is a painful ~15 times slower vs. release, a common Rust weakness. 
-"Govern yourself accordingly" -- and have fun!
 
 Things to do:
 
@@ -31,23 +30,27 @@ simulator will panic, because basic will try to execute things into uninitialize
 There is no "delete" and "backspace" does what says, but does not clear text under cursor.
 Play with it!
 
+Shortlist:
 
+- sample timed execution in main -- LIMIT PERFORMANCE
+- ** crateize (or cratify?) it (for Rust);
+- peek with ctrl+shift+e
 
 Todo:
 
 - RESET signal must be tested
-- sample timed execution in main -- LIMIT PERFORMANCE
 - check that irqs etc match exactly this: https://wiki.nesdev.com/w/index.php/CPU_interrupts
 - interrupts are sampled a bit too much and a bit too early, can be more precise
 - unimplemented opcodes, and their side effects;
 - NMOS 6502 quirky flags in decimal mode  (documented flags are OK);
 - support for 6502 variants: 6510, at a minimum;
 - implement a new memory subsystem, to support pages and layered mapping, also r/o;
-- ** crateize (or cratify?) it (for Rust);
 - faster sub-exact mode: correct cycle count but simplified memory accesses;
 - stun mode for 6510 etc, where the CPU skips the current cycle
 - SYNC/RDY for the 6502. Sync is an OUTPUT signal, high at T0. RDY is an INPUT signal that halts the processor
 - a full program monitor outside memory. That should not be hard.
 
 Evaluating performance:
-a free run of 6502_functional_test runs in 1.46s on my machine. Please use cargo build --release !
+One free run of 6502_functional_test runs in 1.46s on my machine (i5m 1.7 GHz, MB Air 2011), corresponding to 
+a brisky ~75MHz 6502.
+Please compile rust code with --release or performance will slow down to a crawl.

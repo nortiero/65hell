@@ -787,10 +787,9 @@ impl P65 {
         self.cycle = 8;
     }
 
+    // directly jump to address, reset T count and fetch
     pub fn jump<M: Memory>(&mut self, mem: &mut M, address: u16) {
-        self.al =  mem.read(address as usize);
-        self.ah =  mem.read(address.wrapping_add(1) as usize);
-        self.pc =  self.ah_al();
+        self.pc =  address;
         self.fetch_op(mem);
         self.tick();
     }
