@@ -24,6 +24,7 @@ As you probably know debug mode is a painful ~15 times slower vs. release, a com
 Things to do:
 
 `cargo run --release --  -k f004 -t f001 C000:tests/ehbasic.bin`
+
 `cargo run --release -- 000A:tests/fxa.bin -j 0400`
 
 Setup minimal i/o and launch enhanced basic. 
@@ -60,6 +61,5 @@ Todo:
 
 Evaluating performance:
 
-One free run of 6502_functional_test runs in 1.46s on my machine (i5m 1.7 GHz, MB Air 2011), corresponding to 
-a brisky ~75MHz 6502.
-Please compile rust code with --release, as rust debug mode is very slow.
+One free run of 6502_functional_test runs in 1.46s on my machine (i5m 1.7 GHz, MB Air 2011), around ~75MHz 6502.
+Please run in release mode, debug mode is slow.
