@@ -1,0 +1,10 @@
+The binaries in this directory are built from external sources for the sole purpose of testing the simulator.
+
+Licenses are available at the respective repositories:
+
+"Derived by EhBASIC" by Lee Davidson: free for non commercial use. 
+See https://github.com/jefftranter/6502/tree/master/asm/ehbasic
+
+6502 functional tests. GPLv3. File distributed in unmodified binary form. 
+See https://github.com/Klaus2m5/6502_65C02_functional_tests
+
